@@ -224,7 +224,7 @@ class POSApp(tk.Tk):
         self.configure(bg=t["bg"])
 
         # State
-        self.api_base    = "http://localhost:8000/api/v1"
+        self.api_base    = "https://roe-s-pos-production.up.railway.app/api/v1"
         self.session     = requests.Session()
         self.session.headers.update({"Content-Type": "application/json", "Accept": "application/json"})
         self.token       = None

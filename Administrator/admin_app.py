@@ -117,7 +117,7 @@ class RoesAdmin(tk.Tk):
         self.t = DARK
         self.configure(bg=self.t["bg"])
         self.active_page = None
-        self.api_base = "http://localhost:8000/api/v1"
+        self.api_base = "https://roe-s-pos-production.up.railway.app/api/v1"
         self.token = None
         self.user = None
         self.session = requests.Session()
