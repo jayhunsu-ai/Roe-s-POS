@@ -9,6 +9,8 @@ from pathlib import Path
 from datetime import timedelta
 from urllib.parse import urlparse
 from decouple import Csv, config
+import dj_database_url
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
