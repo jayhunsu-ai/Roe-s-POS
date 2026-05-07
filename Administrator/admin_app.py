@@ -1039,7 +1039,7 @@ class RoesAdmin(tk.Tk):
         win.title(f"Order — {order_id}")
         win.geometry("500x400")
         win.configure(bg=t["card"])
-        win.resizable(False, False)
+        win.resizable(True, True)
 
         tk.Label(win, text=order_id, font=("Courier", 16, "bold"),
                  bg=t["card"], fg=t["accent"]).pack(pady=(24, 4))
@@ -1077,14 +1077,50 @@ class RoesAdmin(tk.Tk):
             row.pack(fill="x", pady=2)
             tk.Label(row, text=f"{k}:", font=("Arial", 10), bg=t["card"],
                      fg=t["text_sub"], width=12, anchor="w").pack(side="left")
-            _, sc = STATUS_COLORS.get(v, ("", t["text"]))
+            color_entry = STATUS_COLORS.get(v, ("", t["text"]))
+            sc = color_entry[1] if len(color_entry) > 1 else t["text"]
             fc = sc if k == "Status" else t["text"]
             tk.Label(row, text=v, font=("Arial", 10, "bold"),
                      bg=t["card"], fg=fc).pack(side="left")
 
+        # ── Status changer ───────────────────────────────────────────────────
+        current_status = order.get("status", "")
+        changeable = ["Pending", "Confirmed", "Preparing", "Ready", "Served"]
+        all_statuses = ["Pending", "Confirmed", "Preparing", "Ready", "Served", "Completed", "Cancelled"]
+
+        status_frame = tk.Frame(win, bg=t["card"])
+        status_frame.pack(fill="x", padx=32, pady=(0, 8))
+        tk.Label(status_frame, text="Change Status:", font=("Arial", 10, "bold"),
+                bg=t["card"], fg=t["text_sub"]).pack(side="left")
+
+        status_var = tk.StringVar(value=current_status)
+        status_cb = ttk.Combobox(status_frame, textvariable=status_var,
+                             values=all_statuses, state="readonly",
+                             font=("Arial", 10), width=14)
+        status_cb.pack(side="left", padx=(10, 0))
+
+        def update_status():
+            new_status = status_var.get()
+            if new_status == current_status:
+                messagebox.showinfo("No Change", "Status is already set to that value.", parent=win)
+                return
+            order_id_val = order.get("orderId") or order.get("id")
+            try:
+                self._api_request('patch', f'/orders/orders/{order_id_val}/', json={"status": new_status})
+                messagebox.showinfo("Updated", f"Order status changed to {new_status}.", parent=win)
+                self._load_orders()
+                win.destroy()
+            except Exception as exc:
+                messagebox.showerror("Failed", self._fmt_error(exc), parent=win)
+
+        tk.Button(status_frame, text="Update", font=("Arial", 10, "bold"),
+                bg=t["green"], fg="#fff", relief="flat", padx=12, pady=4,
+                cursor="hand2", command=update_status).pack(side="left", padx=(10, 0))
+
         tk.Button(win, text="Close", font=("Arial", 10, "bold"),
-                  bg=t["accent"], fg="#000", relief="flat", padx=20, pady=8,
-                  cursor="hand2", command=win.destroy).pack(pady=16)
+                bg=t["accent"], fg="#000", relief="flat", padx=20, pady=8,
+                cursor="hand2", command=win.destroy).pack(pady=16)
+        
 
     def _tree_context_menu(self, tree, items_list, id_field, edit_fn, delete_fn):
         t = self.t
@@ -1163,7 +1199,7 @@ class RoesAdmin(tk.Tk):
         win.title("Add Menu Item" if not item else "Edit Menu Item")
         win.geometry("480x520")
         win.configure(bg=t["card"])
-        win.resizable(False, False)
+        win.resizable(True, True)
 
         hdr = tk.Frame(win, bg=t["green"], height=6)
         hdr.pack(fill="x")
@@ -1319,7 +1355,7 @@ class RoesAdmin(tk.Tk):
         win.title("Add Inventory Item" if not item else "Edit Inventory Item")
         win.geometry("480x600")
         win.configure(bg=t["card"])
-        win.resizable(False, False)
+        win.resizable(True, True)
 
         hdr = tk.Frame(win, bg=t["accent"], height=6)
         hdr.pack(fill="x")
@@ -1402,7 +1438,7 @@ class RoesAdmin(tk.Tk):
         win.title("Add Supplier" if not supplier else "Edit Supplier")
         win.geometry("520x550")
         win.configure(bg=t["card"])
-        win.resizable(False, False)
+        win.resizable(True, True)
 
         hdr = tk.Frame(win, bg=t["blue"], height=6)
         hdr.pack(fill="x")
@@ -1463,7 +1499,7 @@ class RoesAdmin(tk.Tk):
         win.title("New Purchase Order" if not po else "Edit Purchase Order")
         win.geometry("480x540")
         win.configure(bg=t["card"])
-        win.resizable(False, False)
+        win.resizable(True, True)
 
         hdr = tk.Frame(win, bg=t["purple"], height=6)
         hdr.pack(fill="x")
@@ -1870,7 +1906,7 @@ class RoesAdmin(tk.Tk):
         win.title("Add Staff" if not staff else "Edit Staff")
         win.geometry("460x520" if staff else "460x580")
         win.configure(bg=t["card"])
-        win.resizable(False, False)
+        win.resizable(True, True)
 
         hdr = tk.Frame(win, bg=t["blue"], height=6)
         hdr.pack(fill="x")
@@ -1977,11 +2013,26 @@ class RoesAdmin(tk.Tk):
         t = self.t
         win = tk.Toplevel(self)
         win.title(f"Performance - {staff['name']}")
-        win.geometry("500x400")
+        win.geometry("500x520")
         win.configure(bg=t["card"])
 
         tk.Label(win, text=f"Staff Performance: {staff['name']}",
-                 font=("Georgia", 16, "bold"), bg=t["card"], fg=t["text"]).pack(pady=(20, 16))
+                font=("Georgia", 16, "bold"), bg=t["card"], fg=t["text"]).pack(pady=(20, 16))
+
+        # ── Fetch live order count for this staff ────────────────────────────
+        staff_id = staff.get("staffId")
+        completed_orders = []
+        total_completed = staff.get("orders", 0)
+        try:
+            all_orders = self._api_list('/orders/orders/')
+            staff_orders = [
+                o for o in all_orders
+                if (o.get("takenBy") == staff_id or o.get("takenByName") == staff.get("name"))
+            ]
+            completed_orders = [o for o in staff_orders if o.get("status") == "Completed"]
+            total_completed = len(completed_orders)
+        except Exception:
+            pass
 
         metrics_frame = tk.Frame(win, bg=t["card"])
         metrics_frame.pack(fill="x", padx=32, pady=(0, 20))
@@ -1991,20 +2042,50 @@ class RoesAdmin(tk.Tk):
             ("Email",            staff.get("email", "N/A")),
             ("Role",             staff.get("role_display") or staff.get("role", "N/A")),
             ("Status",           staff.get("status", "N/A")),
-            ("Orders Completed", staff.get("orders", 0)),
+            ("Orders Completed", total_completed),
         ]
 
         for i, (label, value) in enumerate(performance_data):
             tk.Label(metrics_frame, text=f"{label}:", font=("Arial", 10, "bold"),
-                     bg=t["card"], fg=t["text_sub"], anchor="w").grid(row=i, column=0, sticky="w", pady=2)
+                    bg=t["card"], fg=t["text_sub"], anchor="w").grid(row=i, column=0, sticky="w", pady=2)
             tk.Label(metrics_frame, text=str(value), font=("Arial", 10),
                      bg=t["card"], fg=t["text"], anchor="w").grid(row=i, column=1, sticky="w", padx=(20, 0), pady=2)
 
-        tk.Label(win, text="Recent Orders", font=("Arial", 12, "bold"),
-                 bg=t["card"], fg=t["text"]).pack(anchor="w", padx=32, pady=(20, 8))
-        tk.Label(win, text="Recent order details are not available in this view.",
-                 font=("Arial", 10), bg=t["card"], fg=t["text_sub"], wraplength=420, justify="left").pack(fill="x", padx=32, pady=(0, 20))
-        self._btn(win, "Close", win.destroy).pack(pady=(0, 20), padx=32, fill="x")
+        # ── 3 Most Recent Orders ─────────────────────────────────────────────
+        tk.Label(win, text="3 Most Recent Orders", font=("Arial", 12, "bold"),
+                bg=t["card"], fg=t["text"]).pack(anchor="w", padx=32, pady=(8, 6))
+
+        recent = sorted(completed_orders, key=lambda o: o.get("createdAt", ""), reverse=True)[:3]
+
+        if not recent:
+            tk.Label(win, text="No completed orders found for this staff.",
+                    font=("Arial", 10), bg=t["card"], fg=t["text_sub"],
+                    wraplength=420, justify="left").pack(fill="x", padx=32, pady=(0, 12))
+        else:
+            for o in recent:
+                order_num = o.get("orderNumber") or o.get("orderId") or "—"
+                table     = o.get("tableNumber") or o.get("table") or "—"
+                amount    = self._get_order_total(o)
+                time_str  = o.get("createdAt", "")
+                try:
+                    dt = datetime.fromisoformat(time_str.replace('Z', '+00:00'))
+                    time_display = dt.strftime("%Y-%m-%d %H:%M")
+                except Exception:
+                    time_display = time_str[:16] if time_str else "—"
+
+                row = tk.Frame(win, bg=t["surface"],
+                           highlightthickness=1, highlightbackground=t["border"])
+                row.pack(fill="x", padx=32, pady=3)
+                inner = tk.Frame(row, bg=t["surface"])
+                inner.pack(fill="x", padx=12, pady=6)
+                tk.Label(inner, text=f"Order {order_num}  •  Table {table}",
+                     font=("Arial", 10, "bold"), bg=t["surface"], fg=t["text"]).pack(side="left")
+                tk.Label(inner, text=fmt(amount), font=("Arial", 10, "bold"),
+                     bg=t["surface"], fg=t["green"]).pack(side="right")
+                tk.Label(row, text=time_display, font=("Arial", 9),
+                     bg=t["surface"], fg=t["text_muted"]).pack(anchor="w", padx=12, pady=(0, 4))
+
+        self._btn(win, "Close", win.destroy).pack(pady=(12, 20), padx=32, fill="x")
 
     def _mark_all_notifications_read(self):
         try:
