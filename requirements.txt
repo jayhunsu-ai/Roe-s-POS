@@ -1,0 +1,5 @@
+# Root project requirements aggregator
+# Install all subproject dependencies from one place.
+-r Server/backend/requirements.txt
+-r Administrator/requirements.txt
+-r Client/requirements.txt

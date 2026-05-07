@@ -1161,7 +1161,7 @@ class RoesAdmin(tk.Tk):
         t = self.t
         win = tk.Toplevel(self)
         win.title("Add Menu Item" if not item else "Edit Menu Item")
-        win.geometry("480x440")
+        win.geometry("480x520")
         win.configure(bg=t["card"])
         win.resizable(False, False)
 
@@ -1189,16 +1189,66 @@ class RoesAdmin(tk.Tk):
         price_var = tk.StringVar(value=str(item["price"]) if item else "")
         self._field(win, "Price (₦)", price_var)
 
+        self._load_inventory_items()
+        inventory_display_map = {}
+        ingredient_values = ["None"]
+        for inv in self.inventory_items:
+            display = f"{inv.get('name', 'Unknown')} ({inv.get('quantityInStock', inv.get('qty', 0))} {inv.get('unit', '')})"
+            inventory_display_map[display] = str(inv.get('inventoryItemId') or inv.get('id'))
+            ingredient_values.append(display)
+
+        selected_ingredient = "None"
+        ingredient_qty = ""
+        if item:
+            item_detail = item
+            item_id = str(item.get("menuItemId") or item.get("id") or "")
+            if item_id:
+                try:
+                    item_detail = self._api_request('get', f'/menu/items/{item_id}/')
+                except Exception:
+                    pass
+            first_ingredient = (item_detail.get('ingredients') or [None])[0]
+            if first_ingredient:
+                inv_id = str(first_ingredient.get('inventoryItem') or first_ingredient.get('inventoryItemId') or "")
+                for label, value in inventory_display_map.items():
+                    if value == inv_id:
+                        selected_ingredient = label
+                        break
+                ingredient_qty = str(first_ingredient.get('quantityUsed', ''))
+
+        tk.Label(win, text="INGREDIENT LINK", font=("Arial", 8, "bold"),
+                 bg=t["card"], fg=t["text_sub"]).pack(anchor="w", padx=32)
+        ingredient_var = tk.StringVar(value=selected_ingredient)
+        ingredient_frame = tk.Frame(win, bg=t["input_bg"], highlightthickness=1, highlightbackground=t["border"])
+        ingredient_frame.pack(fill="x", padx=32, pady=(3, 10))
+        ingredient_cb = ttk.Combobox(ingredient_frame, textvariable=ingredient_var,
+                                     values=ingredient_values, state="readonly", font=("Arial", 11))
+        ingredient_cb.pack(fill="x", padx=4, ipady=6)
+
+        quantity_var = tk.StringVar(value=ingredient_qty)
+        self._field(win, "Ingredient Qty Used", quantity_var)
+
         def save():
             selected_item_type = item_type_var.get().strip()
             if not selected_item_type:
                 messagebox.showwarning("Validation", "Please select an item type.", parent=win)
+                return
+            if ingredient_var.get() != "None" and not quantity_var.get().strip():
+                messagebox.showwarning("Validation", "Please enter ingredient quantity used.", parent=win)
                 return
             payload = {
                 'name': name_var.get().strip(),
                 'itemType': selected_item_type,
                 'price': float(price_var.get() or 0),
             }
+            if ingredient_var.get() != "None":
+                ingredient_id = inventory_display_map.get(ingredient_var.get())
+                payload['ingredients'] = [{
+                    'inventoryItem': ingredient_id,
+                    'quantityUsed': float(quantity_var.get() or 0),
+                }]
+            else:
+                payload['ingredients'] = []
             if not payload['name']:
                 messagebox.showwarning("Validation", "Name is required.", parent=win)
                 return
@@ -1602,7 +1652,7 @@ class RoesAdmin(tk.Tk):
         hf = tk.Frame(parent, bg=t["bg"])
         hf.pack(fill="x", pady=(12, 8), padx=4)
         self._btn(hf, "+ New Purchase Order", lambda: self._po_form()).pack(side="right")
-
+        
         tf = tk.Frame(parent, bg=t["card"], highlightthickness=1, highlightbackground=t["border"])
         tf.pack(fill="both", expand=True, padx=4)
 
@@ -1612,14 +1662,57 @@ class RoesAdmin(tk.Tk):
         self._status_tag(tree)
 
         for po in self.purchase_orders:
-            tree.insert("", "end", values=(
-                po.get("id") or po.get("poNumber") or "PO-?",
-                po.get("supplier") or po.get("supplierName") or "",
-                po.get("items") or po.get("itemCount") or 0,
-                fmt(po.get("total") or po.get("amount") or 0),
-                po.get("status") or "Unknown",
-                po.get("date") or po.get("createdAt") or ""
-            ), tags=(po.get("status") or "Unknown",))
+            tree.insert("", "end", iid=str(po.get("purchaseOrderId") or po.get("id") or ""),
+                        values=(
+                            po.get("poNumber") or po.get("id") or "PO-?",
+                            po.get("supplier") or po.get("supplierName") or "",
+                            po.get("items") or po.get("itemCount") or 0,
+                            fmt(po.get("totalCost") or po.get("total") or po.get("amount") or 0),
+                            po.get("status") or "Unknown",
+                            po.get("createdAt") or po.get("date") or ""
+                            ), tags=(po.get("status") or "Unknown",))
+            # ── Mark as Received button ───────────────────────────────────────────
+        btn_frame = tk.Frame(parent, bg=t["bg"])
+        btn_frame.pack(fill="x", pady=(8, 4), padx=4)
+
+        def mark_received():
+            sel = tree.selection()
+            if not sel:
+                messagebox.showwarning("No Selection", "Please select a Purchase Order first.")
+                return
+            iid = sel[0]
+            po = next((p for p in self.purchase_orders
+                       if str(p.get("purchaseOrderId") or p.get("id") or "") == iid), None)
+            if not po:
+                messagebox.showerror("Error", "Could not find selected Purchase Order.")
+                return
+            if po.get("status") == "Received":
+                messagebox.showinfo("Already Received", f"{po.get('poNumber')} has already been received.")
+                return
+            if not messagebox.askyesno("Confirm",
+                                       f"Mark {po.get('poNumber')} as Received?\n\nThis will update inventory stock levels."):
+                return
+            
+            po_id = po.get("purchaseOrderId") or po.get("id")
+            try:
+                self._api_request('post', f'/inventory/purchase-orders/{po_id}/receive/')
+                messagebox.showinfo("Success", f"{po.get('poNumber')} marked as Received. Inventory updated.")
+                self.show_page('inventory')
+            except Exception as exc:
+                messagebox.showerror("Failed", self._fmt_error(exc))
+                
+        receive_btn = tk.Button(
+            btn_frame,
+            text="✅  Mark Selected as Received",
+            font=("Arial", 10, "bold"),
+            bg=t["green"], fg="#ffffff",
+            activebackground="#059669", activeforeground="#ffffff",
+            relief="flat", bd=0, cursor="hand2", padx=14, pady=6,
+            command=mark_received
+            )
+        receive_btn.pack(side="left")
+        tk.Label(btn_frame, text="Select a Purchase Order above, then click to receive and update stock.",
+            font=("Arial", 9), bg=t["bg"], fg=t["text_muted"]).pack(side="left", padx=12)
 
     # ── ANALYTICS ─────────────────────────────────────────────────────────
     # ── BUG FIX #1 (continued): Wrap in try/except, show specific error,

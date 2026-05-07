@@ -8,8 +8,8 @@ class MenuItemIngredientSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MenuItemIngredient
-        fields = ['id', 'inventoryItem', 'inventory_item_name', 'quantity', 'unit']
-        read_only_fields = ['id']
+        fields = ['ingredientId', 'inventoryItem', 'inventory_item_name', 'quantityUsed', 'unit']
+        read_only_fields = ['ingredientId', 'inventory_item_name', 'unit']
 
 class CategorySerializer(serializers.ModelSerializer):
     """Serializer for menu categories"""
@@ -50,16 +50,49 @@ class MenuItemSerializer(serializers.ModelSerializer):
     """Full serializer for menu item details"""
     category_name = serializers.CharField(source='category.name', read_only=True)
     stock_info = serializers.SerializerMethodField()
-    ingredients = MenuItemIngredientSerializer(many=True, read_only=True)
+    ingredients_count = serializers.SerializerMethodField()
+    ingredients = MenuItemIngredientSerializer(many=True, required=False)
 
     class Meta:
         model = MenuItem
         fields = [
             'menuItemId', 'category', 'category_name', 'name', 'description',
             'itemType', 'price', 'image', 'isAvailable', 'trackStock',
-            'createdAt', 'updatedAt', 'stock_info', 'ingredients'
+            'createdAt', 'updatedAt', 'stock_info', 'ingredients_count', 'ingredients'
         ]
         read_only_fields = ['menuItemId', 'createdAt', 'updatedAt']
+
+    def get_stock_info(self, obj):
+        if not obj.trackStock:
+            return None
+        try:
+            return {
+                'quantity': obj.stock.quantity,
+                'unit': obj.stock.unit,
+            }
+        except Stock.DoesNotExist:
+            return None
+
+    def get_ingredients_count(self, obj):
+        return obj.ingredients.count()
+
+    def create(self, validated_data):
+        ingredients_data = validated_data.pop('ingredients', [])
+        menu_item = MenuItem.objects.create(**validated_data)
+        for ingredient_data in ingredients_data:
+            MenuItemIngredient.objects.create(menuItem=menu_item, **ingredient_data)
+        return menu_item
+
+    def update(self, instance, validated_data):
+        ingredients_data = validated_data.pop('ingredients', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if ingredients_data is not None:
+            instance.ingredients.all().delete()
+            for ingredient_data in ingredients_data:
+                MenuItemIngredient.objects.create(menuItem=instance, **ingredient_data)
+        return instance
 
 
 class StockSerializer(serializers.ModelSerializer):

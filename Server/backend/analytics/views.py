@@ -319,6 +319,17 @@ class AnalyticsViewSet(viewsets.ReadOnlyModelViewSet):
                 quantityInStock__lte=F('lowStockThreshold')
             ).values('name', 'quantityInStock', 'lowStockThreshold')[:5]
         )
+    
+    def _get_highest_priced_items(self, limit=5):
+        """Get highest priced menu items"""
+        from menu.models import MenuItem
+        return list(
+            MenuItem.objects.filter(
+                isAvailable=True
+                ).order_by('-price').values(
+                    'name', 'price', 'category__name'
+                    )[:limit]
+                    )
 
     def _get_pending_orders_count(self):
         """Get count of pending orders"""
