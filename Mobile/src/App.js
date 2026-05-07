@@ -20,7 +20,7 @@ const NotificationListener = () => {
   useEffect(() => {
     if (!accessToken) return;
 
-    const base = process.env.REACT_APP_API_BASE_URL || 'http://your-server-ip:8000/api/v1';
+    const base = process.env.REACT_APP_API_BASE_URL || 'https://roe-s-pos-production.up.railway.app/api/v1';
     const wsBase = base.replace(/^http/, 'ws').replace(/\/$/, '');
     const socketUrl = `${wsBase}/ws/notifications/?token=${accessToken}`;
     const socket = new WebSocket(socketUrl);
