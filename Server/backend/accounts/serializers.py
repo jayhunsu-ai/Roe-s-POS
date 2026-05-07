@@ -63,6 +63,13 @@ class StaffSetupSerializer(StaffCreateSerializer):
     class Meta(StaffCreateSerializer.Meta):
         fields = ['staffName', 'email', 'pin', 'confirm_pin', 'phone']
 
+    def validate(self, data):
+        # Setup is for the first administrator only, so skip the clerk-only role rule
+        # from StaffCreateSerializer.validate() when no role field is supplied.
+        if 'role' in data:
+            return super().validate(data)
+        return data
+
     def create(self, validated_data):
         pin = validated_data.pop('pin')
         validated_data.pop('confirm_pin')
