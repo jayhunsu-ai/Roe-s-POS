@@ -1,0 +1,4 @@
+requests
+Pillow
+websockets
+websocket-client

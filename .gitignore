@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Environment & Secrets
+.env
+*.env
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Django
+db.sqlite3
+staticfiles/
+media/
+*.log
+
+# Node / React Native
+node_modules/
+package-lock.json
+.expo/
+*.hbc
+
+# IDEs and editors
+.vscode/
+.idea/
+.cursor/
+.sixth/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Build artifacts
+build/
+dist/
+*.egg-info/

@@ -1,0 +1,214 @@
+
+<style>
+h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);color:var(--color-text-primary)}
+.wrap{padding:1rem 0}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1.25rem}
+button.f{font-size:12px;padding:4px 12px;border-radius:20px;border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-secondary);cursor:pointer;transition:all .15s}
+button.f.active{background:var(--color-background-secondary);color:var(--color-text-primary);border-color:var(--color-border-primary)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:1.25rem}
+.stat{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:.75rem 1rem}
+.stat-label{font-size:12px;color:var(--color-text-secondary);margin-bottom:4px}
+.stat-num{font-size:22px;font-weight:500}
+.stat-num.high{color:var(--color-text-danger)}
+.stat-num.med{color:var(--color-text-warning)}
+.stat-num.low{color:var(--color-text-secondary)}
+.issue{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);margin-bottom:8px;overflow:hidden}
+.issue-header{display:flex;align-items:flex-start;gap:10px;padding:.75rem 1rem;cursor:pointer;user-select:none}
+.issue-header:hover{background:var(--color-background-secondary)}
+.badge{font-size:11px;font-weight:500;padding:2px 8px;border-radius:10px;white-space:nowrap;flex-shrink:0;margin-top:2px}
+.badge.high{background:var(--color-background-danger);color:var(--color-text-danger)}
+.badge.med{background:var(--color-background-warning);color:var(--color-text-warning)}
+.badge.low{background:var(--color-background-secondary);color:var(--color-text-secondary)}
+.app-tag{font-size:11px;padding:2px 8px;border-radius:10px;border:0.5px solid var(--color-border-secondary);color:var(--color-text-secondary);flex-shrink:0;margin-top:2px}
+.title{font-size:14px;font-weight:500;flex:1}
+.chevron{font-size:12px;color:var(--color-text-tertiary);flex-shrink:0;margin-top:3px;transition:transform .2s}
+.issue.open .chevron{transform:rotate(90deg)}
+.body{display:none;padding:.75rem 1rem;border-top:0.5px solid var(--color-border-tertiary);font-size:13px;line-height:1.6;color:var(--color-text-secondary)}
+.issue.open .body{display:block}
+.body pre{background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:.75rem;margin:.5rem 0;font-family:var(--font-mono);font-size:12px;overflow-x:auto;white-space:pre;color:var(--color-text-primary)}
+.body p{margin-bottom:.5rem}
+.body p:last-child{margin-bottom:0}
+</style>
+<h2 class="sr-only">All code review issues compiled across accounts, inventory, menu, and orders apps with severity and fixes</h2>
+<div class="wrap">
+<div class="stats" id="stats"></div>
+<div class="filters">
+  <button class="f active" onclick="filter('all',this)">All</button>
+  <button class="f" onclick="filter('high',this)">High</button>
+  <button class="f" onclick="filter('med',this)">Medium</button>
+  <button class="f" onclick="filter('low',this)">Low</button>
+  <button class="f" onclick="filter('accounts',this)">accounts</button>
+  <button class="f" onclick="filter('inventory',this)">inventory</button>
+  <button class="f" onclick="filter('menu',this)">menu</button>
+  <button class="f" onclick="filter('orders',this)">orders</button>
+  <button class="f" onclick="filter('settings',this)">settings</button>
+</div>
+<div id="list"></div>
+</div>
+<script>
+const issues=[
+{app:'accounts',sev:'med',title:'Broken test — pin kwarg not accepted by create_user',body:`<p>The test passes <code>pin='123456'</code> to <code>create_user</code>, which only accepts <code>password</code>. The test errors before asserting anything.</p><pre>staff = Staff.objects.create_user(
+    email='test@example.com',
+    staffName='Test User',
+    password='123456'  # was: pin='123456'
+)</pre>`},
+{app:'accounts',sev:'med',title:'Admin changing another staff PIN must know the current PIN',body:`<p>The <code>change_pin</code> view checks <code>staff.check_password(old_pin)</code> unconditionally. An admin resetting someone else's PIN shouldn't need to know it.</p><pre>@action(detail=True, methods=['post'])
+def change_pin(self, request, pk=None):
+    staff = self.get_object()
+    serializer = self.get_serializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    is_admin_changing_other = (
+        request.user.role == Staff.Roles.ADMIN
+        and str(staff.staffId) != str(request.user.staffId)
+    )
+    if not is_admin_changing_other:
+        if not staff.check_password(serializer.validated_data['old_pin']):
+            return Response({'error': 'Incorrect current PIN'}, status=400)
+    staff.set_password(serializer.validated_data['new_pin'])
+    staff.save()</pre>`},
+{app:'accounts',sev:'low',title:'HasRole permission class is defined but never used',body:`<p>Remove it or wire it up in views to replace the repeated <code>role in [...]</code> pattern.</p>`},
+{app:'accounts',sev:'low',title:'failedPinAttempts not reset when account is re-activated',body:`<p>If admin sets <code>is_active=True</code> on a locked account, <code>failedPinAttempts</code> stays at 5. One wrong attempt locks them again. Fix in the update serializer:</p><pre>def update(self, instance, validated_data):
+    if validated_data.get('is_active') and not instance.is_active:
+        validated_data['failedPinAttempts'] = 0
+    return super().update(instance, validated_data)</pre>`},
+{app:'accounts',sev:'low',title:'Login endpoint vulnerable to email enumeration via timing',body:`<p>Unknown email returns early (no bcrypt work), known-but-wrong password goes through <code>check_password</code>. Timing difference leaks valid emails. Dummy-check on unknown user:</p><pre>try:
+    user = Staff.objects.get(email=email)
+except Staff.DoesNotExist:
+    check_password('dummy', 'pbkdf2_sha256$...')  # consume similar time
+    return Response({'error': 'Invalid credentials'}, status=401)</pre>`},
+{app:'accounts',sev:'low',title:'CanChangePin and IsAdminOrSelf are functionally identical',body:`<p>Both allow admin full access and restrict others to their own object. Consolidate into one or add a comment explaining the distinction.</p>`},
+{app:'inventory',sev:'high',title:'poNumber race condition — sequential generator not concurrency-safe',body:`<p>Two simultaneous PO creations can read the same last record and generate the same number. Use a DB sequence or a dedicated counter table with <code>select_for_update()</code>.</p><pre>from django.db import models, transaction
+
+class POCounter(models.Model):
+    count = models.PositiveIntegerField(default=0)
+
+def save(self, *args, **kwargs):
+    if not self.poNumber:
+        with transaction.atomic():
+            counter, _ = POCounter.objects.select_for_update().get_or_create(pk=1)
+            counter.count += 1
+            counter.save()
+            self.poNumber = f"PO-{str(counter.count).zfill(4)}"
+    super().save(*args, **kwargs)</pre>`},
+{app:'inventory',sev:'med',title:'PurchaseOrder.update() deletes and recreates items, wiping quantityReceived',body:`<p>Updating a PO that has been partially received destroys received quantity data. Guard against this:</p><pre>def update(self, instance, validated_data):
+    if instance.status != PurchaseOrder.POStatus.DRAFT:
+        raise serializers.ValidationError(
+            'Cannot edit items on a non-draft purchase order.'
+        )
+    return super().update(instance, validated_data)</pre>`},
+{app:'inventory',sev:'low',title:'isLowStock uses <= so item at exact threshold is flagged',body:`<p>Decide on intent: if threshold means "alert when below this", use <code><</code> not <code><=</code>. Currently an item with stock exactly equal to threshold is considered low.</p><pre>@property
+def isLowStock(self):
+    return self.quantityInStock < self.lowStockThreshold</pre>`},
+{app:'inventory',sev:'low',title:'Permission class duplicated between inventory/views.py and accounts/permissions.py',body:`<p><code>IsAuthenticatedAndInventoryManagerOrReadOnly</code> duplicates <code>IsAdminOrInventoryManager</code>. Import and use the existing one.</p>`},
+{app:'inventory',sev:'low',title:'InventoryTransactionSerializer has writable relatedPO despite read-only viewset',body:`<p>Misleading — mark it read-only since transactions are never created via this endpoint.</p><pre>relatedPO = serializers.PrimaryKeyRelatedField(read_only=True)</pre>`},
+{app:'menu',sev:'high',title:'Duplicate __str__ in MenuItemAddon — second one wins and hardcodes ₦',body:`<p>Python uses the last definition. The second method ignores settings and hardcodes the currency symbol. Delete the second one.</p>`},
+{app:'menu',sev:'high',title:'get_queryset filters by isInStock which is a @property, not a DB field',body:`<p><code>queryset.filter(isInStock=True)</code> throws <code>FieldError</code> at runtime. Filter using real DB fields:</p><pre>def get_queryset(self):
+    qs = MenuItem.objects.select_related('category', 'stock')
+    available_only = self.request.query_params.get('available_only','true').lower()=='true'
+    if available_only:
+        qs = qs.filter(isAvailable=True).filter(
+            models.Q(trackStock=False) |
+            models.Q(trackStock=True, stock__quantity__gt=0)
+        )
+    return qs</pre>`},
+{app:'menu',sev:'high',title:'low_stock action filters by isLowStock — also a @property, not a DB field',body:`<p>Use F-expression instead:</p><pre>from django.db.models import F
+
+@action(detail=False, methods=['get'])
+def low_stock(self, request):
+    qs = self.get_queryset().filter(quantity__lt=F('lowStockThreshold'))
+    return Response(self.get_serializer(qs, many=True).data)</pre>`},
+{app:'menu',sev:'med',title:'adjust_stock allows stock to go negative on PositiveIntegerField',body:`<p>A negative adjustment below zero causes a DB integrity error with no clean error message.</p><pre>new_qty = quantity_before + adjustment
+if new_qty < 0:
+    return Response(
+        {'error': 'Adjustment would result in negative stock'},
+        status=status.HTTP_400_BAD_REQUEST
+    )
+stock.quantity = new_qty</pre>`},
+{app:'menu',sev:'med',title:'StockSerializer is_low_stock field name mismatches model property isLowStock',body:`<p>DRF won't find it automatically. Add source:</p><pre>is_low_stock = serializers.BooleanField(source='isLowStock', read_only=True)</pre>`},
+{app:'menu',sev:'low',title:'restock does not validate quantity > 0',body:`<p>Passing zero or a negative quantity logs a meaningless or misleading transaction.</p><pre>if quantity <= 0:
+    return Response({'error': 'Quantity must be positive'}, status=400)</pre>`},
+{app:'orders',sev:'high',title:'pre_save signal writes to DB before order is committed — no rollback on failure',body:`<p><code>deduct_inventory_for_order</code> is called in <code>pre_save</code>. If <code>super().save()</code> subsequently fails, inventory is already decremented with no rollback. Move to <code>post_save</code> with <code>transaction.on_commit()</code>:</p><pre>@receiver(post_save, sender=Order)
+def handle_order_status_change(sender, instance, created, **kwargs):
+    if not created and instance.status == Order.OrderStatus.COMPLETED:
+        transaction.on_commit(lambda: deduct_inventory_for_order(instance))</pre>`},
+{app:'orders',sev:'high',title:'OrderItem.save() overwrites unitPrice on every save, losing historical price',body:`<p>Editing quantity re-fetches the current menu price, silently changing the billed amount. Only set on creation:</p><pre>def save(self, *args, **kwargs):
+    if not self.pk:
+        self.unitPrice = self.menuItem.price
+    self.lineTotal = self.unitPrice * self.quantity
+    super().save(*args, **kwargs)</pre>`},
+{app:'orders',sev:'high',title:'orderNumber/receiptNumber race condition — same as PO generator',body:`<p>All three sequential number generators (Order, Receipt, PurchaseOrder) share the same concurrency flaw. Apply the same counter table fix across all three models.</p>`},
+{app:'orders',sev:'med',title:'Payment status update uses total_paid (unverified) for PARTIAL check',body:`<p>An unconfirmed transfer flips the order to PARTIAL immediately. Use <code>verified_paid</code> consistently or document the asymmetry explicitly.</p><pre>if verified_paid >= float(order.totalAmount):
+    order.paymentStatus = Order.PaymentStatus.PAID
+elif verified_paid > 0:
+    order.paymentStatus = Order.PaymentStatus.PARTIAL
+else:
+    order.paymentStatus = Order.PaymentStatus.UNPAID</pre>`},
+{app:'orders',sev:'med',title:'format_thermal_receipt uses datetime.now() ignoring Africa/Lagos timezone',body:`<p>The footer timestamp doesn't respect the configured timezone.</p><pre>from django.utils import timezone
+# replace:
+# datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+# with:
+timezone.localtime(timezone.now()).strftime('%Y-%m-%d %H:%M:%S')</pre>`},
+{app:'orders',sev:'med',title:'send_digital endpoint just sets a flag — name is misleading',body:`<p>Rename to <code>mark_as_sent</code> or add a clear docstring/comment that actual sending is handled externally.</p>`},
+{app:'orders',sev:'low',title:'Orders test passes pin kwarg — same broken pattern as accounts test',body:`<p>Same fix: replace <code>pin='123456'</code> with <code>password='123456'</code> in <code>create_user</code> call.</p>`},
+{app:'orders',sev:'low',title:'Customer.outstanding_balance causes N+1 queries',body:`<p>Each call hits payments for every unpaid order. Annotate at the queryset level or use <code>prefetch_related</code> when fetching customers.</p>`},
+{app:'orders',sev:'low',title:'receiptHTML stores full rendered HTML in the DB, bloating the receipt table',body:`<p>Consider generating it on-the-fly in the view/serializer rather than persisting it. If persistence is needed, move to a separate table or file storage.</p>`},
+{app:'settings',sev:'med',title:'djangorestframework-simplejwt==1.0.0 does not exist',body:`<p>Package versions are in the 5.x/6.x range. This will fail to install.</p><pre>djangorestframework-simplejwt==5.3.1</pre>`},
+{app:'settings',sev:'med',title:'dj-database-url is listed but never used',body:`<p>settings.py manually parses DATABASE_URL with urlparse. Remove the dependency or replace the manual parser with <code>dj_database_url.parse()</code>.</p>`},
+{app:'settings',sev:'low',title:'ROTATE_REFRESH_TOKENS and BLACKLIST_AFTER_ROTATION both False',body:`<p>Stolen refresh tokens cannot be invalidated. Enable rotation and add <code>rest_framework_simplejwt.token_blacklist</code> to INSTALLED_APPS.</p><pre>SIMPLE_JWT = {
+    ...
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+}</pre>`},
+{app:'settings',sev:'low',title:'No test runner in requirements.txt',body:`<p>Tests exist across all apps but pytest-django (or similar) is not listed.</p><pre>pytest==8.3.5
+pytest-django==4.9.0</pre>`},
+{app:'settings',sev:'low',title:'SECURE_AUDIT_LOG is read from env but never wired to a logging backend',body:`<p>The flag is consumed nowhere in settings. Either connect it to a logging config or remove it.</p>`},
+];
+
+let current='all';
+function filter(key,btn){
+  current=key;
+  document.querySelectorAll('button.f').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+function render(){
+  const filtered=issues.filter(i=>{
+    if(current==='all')return true;
+    if(current==='high'||current==='med'||current==='low')return i.sev===current;
+    return i.app===current;
+  });
+  const list=document.getElementById('list');
+  list.innerHTML=filtered.map((iss,idx)=>`
+    <div class="issue" id="iss-${idx}" onclick="toggle(${idx})">
+      <div class="issue-header">
+        <span class="badge ${iss.sev}">${iss.sev==='med'?'medium':iss.sev}</span>
+        <span class="app-tag">${iss.app}</span>
+        <span class="title">${iss.title}</span>
+        <span class="chevron">▶</span>
+      </div>
+      <div class="body">${iss.body}</div>
+    </div>
+  `).join('');
+
+  const stats=document.getElementById('stats');
+  const h=filtered.filter(i=>i.sev==='high').length;
+  const m=filtered.filter(i=>i.sev==='med').length;
+  const l=filtered.filter(i=>i.sev==='low').length;
+  stats.innerHTML=`
+    <div class="stat"><div class="stat-label">Total</div><div class="stat-num">${filtered.length}</div></div>
+    <div class="stat"><div class="stat-label">High</div><div class="stat-num high">${h}</div></div>
+    <div class="stat"><div class="stat-label">Medium</div><div class="stat-num med">${m}</div></div>
+    <div class="stat"><div class="stat-label">Low</div><div class="stat-num low">${l}</div></div>
+  `;
+}
+
+function toggle(idx){
+  const el=document.getElementById('iss-'+idx);
+  el.classList.toggle('open');
+}
+
+render();
+</script>
