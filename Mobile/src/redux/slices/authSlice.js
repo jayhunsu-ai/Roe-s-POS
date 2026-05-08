@@ -1,7 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL  
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 
 const loadStorageValue = (key) => {
   if (typeof window === 'undefined') return null;
@@ -26,11 +26,11 @@ const removeStorageValue = (key) => {
 
 export const loginWithPin = createAsyncThunk(
   'auth/loginWithPin',
-  async ({ pin }, { rejectWithValue }) => {
+  async ({ email, pin }, { rejectWithValue }) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/token/`, {
-        username: pin,
-        password: pin,
+      const response = await axios.post(`${API_BASE_URL}/accounts/staff/login/`, {
+        email,
+        pin,
       });
       const { access, refresh, user } = response.data;
 
@@ -40,7 +40,10 @@ export const loginWithPin = createAsyncThunk(
 
       return { access, refresh, user };
     } catch (error) {
-      return rejectWithValue(error.response?.data?.detail || 'Login failed');
+      const data = error.response?.data;
+      // The backend returns errors as { error: '...' }
+      const message = data?.error || data?.detail || 'Login failed';
+      return rejectWithValue(message);
     }
   }
 );
@@ -123,5 +126,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearError } = authSlice.actions;
+export const { clearError, setAccessToken } = authSlice.actions;
 export default authSlice.reducer;

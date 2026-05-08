@@ -6,16 +6,22 @@ import {
   Card,
   CardContent,
   CircularProgress,
-  Stack,
+  IconButton,
+  InputAdornment,
+  TextField,
   Typography,
 } from '@mui/material';
+import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { clearError, loginWithPin } from '../../redux/slices/authSlice';
 
 const LoginScreen = () => {
+  const [email, setEmail] = useState('');
   const [pin, setPin] = useState('');
+  const [showPin, setShowPin] = useState(false);
   const [showError, setShowError] = useState(false);
+
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { isLoading, error, isAuthenticated } = useSelector((state) => state.auth);
@@ -37,25 +43,13 @@ const LoginScreen = () => {
     }
   }, [error, dispatch]);
 
-  const handleLogin = async () => {
-    if (!pin.trim()) {
-      return;
-    }
-    if (pin.length < 4) {
-      return;
-    }
-    dispatch(loginWithPin({ pin: pin.trim() }));
+  const handleLogin = (e) => {
+    e?.preventDefault();
+    if (!email.trim() || !pin.trim()) return;
+    dispatch(loginWithPin({ email: email.trim(), pin: pin.trim() }));
   };
 
-  const handleNumberPress = (number) => {
-    if (pin.length < 6) {
-      setPin((prev) => prev + number);
-    }
-  };
-
-  const handleBackspace = () => {
-    setPin(pin.slice(0, -1));
-  };
+  const isFormValid = email.trim().length > 0 && pin.trim().length >= 6;
 
   return (
     <Box
@@ -68,7 +62,8 @@ const LoginScreen = () => {
         p: 2,
       }}
     >
-      <Box sx={{ width: '100%', maxWidth: 480 }}>
+      <Box sx={{ width: '100%', maxWidth: 420 }}>
+        {/* Header */}
         <Box sx={{ textAlign: 'center', mb: 4 }}>
           <Typography variant="h4" color="white" fontWeight={300}>
             Welcome to
@@ -76,77 +71,81 @@ const LoginScreen = () => {
           <Typography variant="h3" color="white" fontWeight={700}>
             Roe&apos;s POS
           </Typography>
-          <Typography sx={{ color: 'rgba(255,255,255,0.8)' }}>
-            Enter your PIN to get started
+          <Typography sx={{ color: 'rgba(255,255,255,0.8)', mt: 0.5 }}>
+            Sign in to get started
           </Typography>
         </Box>
 
-        <Card sx={{ borderRadius: 3, mb: 3 }}>
-          <CardContent>
-            <Box sx={{ textAlign: 'center', mb: 3 }}>
-              <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
-                PIN
-              </Typography>
-              <Stack direction="row" justifyContent="center" spacing={2}>
-                {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <Box
-                    key={i}
-                    sx={{
-                      width: 14,
-                      height: 14,
-                      borderRadius: '50%',
-                      border: '2px solid #1976D2',
-                      bgcolor: i <= pin.length ? '#1976D2' : 'transparent',
-                    }}
-                  />
-                ))}
-              </Stack>
-            </Box>
+        {/* Card */}
+        <Card sx={{ borderRadius: 3 }}>
+          <CardContent sx={{ p: 3 }}>
+            <Typography variant="h6" fontWeight={600} sx={{ mb: 3 }}>
+              Staff Login
+            </Typography>
 
-            {showError && error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+            {showError && error && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {error}
+              </Alert>
+            )}
 
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, minmax(70px, 1fr))',
-                gap: 1.5,
+            {/* Email */}
+            <TextField
+              label="Email address"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+              fullWidth
+              autoComplete="email"
+              autoFocus
+              sx={{ mb: 2 }}
+            />
+
+            {/* PIN / Password */}
+            <TextField
+              label="PIN"
+              type={showPin ? 'text' : 'password'}
+              value={pin}
+              onChange={(e) => {
+                const val = e.target.value;
+                // Allow only digits, max 6 chars
+                if (/^\d{0,6}$/.test(val)) setPin(val);
               }}
-            >
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((number) => (
-                <Button
-                  key={number}
-                  variant="outlined"
-                  onClick={() => handleNumberPress(number.toString())}
-                  sx={{ py: 2, fontSize: 24, fontWeight: 700, borderRadius: 999 }}
-                >
-                  {number}
-                </Button>
-              ))}
+              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+              fullWidth
+              inputProps={{ maxLength: 6, inputMode: 'numeric' }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => setShowPin((prev) => !prev)}
+                      edge="end"
+                      aria-label={showPin ? 'Hide PIN' : 'Show PIN'}
+                    >
+                      {showPin ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+              helperText="Enter your 6-digit PIN"
+              sx={{ mb: 3 }}
+            />
 
-              <Button onClick={() => setPin('')} color="warning" sx={{ py: 2, borderRadius: 999 }}>
-                Clear
-              </Button>
-              <Button variant="outlined" onClick={() => handleNumberPress('0')} sx={{ py: 2, fontSize: 24, borderRadius: 999 }}>
-                0
-              </Button>
-              <Button onClick={handleBackspace} color="error" sx={{ py: 2, borderRadius: 999 }}>
-                ⌫
-              </Button>
-            </Box>
+            {/* Submit */}
+            <Button
+              variant="contained"
+              fullWidth
+              onClick={handleLogin}
+              disabled={isLoading || !isFormValid}
+              sx={{ py: 1.5, borderRadius: 2, fontSize: 16 }}
+            >
+              {isLoading ? <CircularProgress size={22} color="inherit" /> : 'Login'}
+            </Button>
           </CardContent>
         </Card>
 
-        <Button
-          variant="contained"
-          fullWidth
-          onClick={handleLogin}
-          disabled={isLoading || pin.length < 4}
-          sx={{ py: 1.5, borderRadius: 2, mb: 2 }}
-        >
-          {isLoading ? <CircularProgress size={22} color="inherit" /> : 'Login'}
-        </Button>
-
-        <Typography textAlign="center" sx={{ color: 'rgba(255,255,255,0.7)' }}>
+        <Typography textAlign="center" sx={{ color: 'rgba(255,255,255,0.7)', mt: 2 }}>
           Ask your manager if you don&apos;t know your PIN
         </Typography>
       </Box>
