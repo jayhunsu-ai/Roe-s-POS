@@ -119,6 +119,7 @@ class RoesAdmin(tk.Tk):
         self.active_page = None
         self.api_base = "https://roe-s-pos-production.up.railway.app/api/v1"
         self.token = None
+        self.refresh_token = None
         self.user = None
         self.session = requests.Session()
         self.orders = []
@@ -178,6 +179,20 @@ class RoesAdmin(tk.Tk):
             return response.json()
         except RequestException as exc:
             raise Exception(str(exc))
+    
+    def _refresh_token(self):
+        try:
+            resp = self.session.post(
+                f"{self.api_base}/token/refresh/",
+                json={"refresh": self.refresh_token},
+                timeout=10
+            )
+            if resp.status_code == 200:
+                self.token = resp.json()["access"]
+                return True
+        except Exception:
+            pass
+        return False
 
     def _fmt_error(self, exc):
         message = exc.args[0] if exc.args else str(exc)
@@ -375,6 +390,7 @@ class RoesAdmin(tk.Tk):
                         'pin': pass_var.get().strip()
                     })
                     self.token = data.get('access')
+                    self.refresh_token = data.get('refresh')
                     self.user = data.get('user')
                     if not self.user:
                         self._fetch_current_user()
