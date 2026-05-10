@@ -54,13 +54,9 @@ const RoleRedirect = () => {
 
 const AppRoutes = () => (
   <Routes>
-    {/* Public */}
     <Route path="/login" element={<LoginScreen />} />
-
-    {/* Root → role-based redirect */}
     <Route path="/" element={<RoleRedirect />} />
 
-    {/* ── Inventory Manager ── */}
     <Route path="/im/dashboard" element={
       <RequireAuth allowedRoles={['InventoryManager', 'Administrator']}>
         <IMDashboardScreen />
@@ -72,21 +68,18 @@ const AppRoutes = () => (
       </RequireAuth>
     } />
 
-    {/* ── Clerk / Admin (MainLayout with bottom nav) ── */}
-    <Route path="/*" element={
+    <Route element={
       <RequireAuth allowedRoles={['Clerk', 'Administrator', 'Kitchen', 'InventoryManager']}>
         <MainLayout />
       </RequireAuth>
     }>
-      <Route path="menu"      element={<MenuScreen />} />
-      <Route path="orders"    element={<OrdersScreen />} />
-      <Route path="inventory" element={<InventoryScreen />} />
-      <Route path="profile"   element={<ProfileScreen />} />
-      <Route path="cart"      element={<CartScreen />} />
-      <Route index            element={<RoleRedirect />} />
+      <Route path="/menu"      element={<MenuScreen />} />
+      <Route path="/orders"    element={<OrdersScreen />} />
+      <Route path="/inventory" element={<InventoryScreen />} />
+      <Route path="/profile"   element={<ProfileScreen />} />
+      <Route path="/cart"      element={<CartScreen />} />
     </Route>
 
-    {/* Fallback */}
     <Route path="*" element={<Navigate to="/login" replace />} />
   </Routes>
 );
