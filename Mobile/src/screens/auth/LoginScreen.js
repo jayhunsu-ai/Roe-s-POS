@@ -24,7 +24,7 @@ const LoginScreen = () => {
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { isLoading, error, isAuthenticated, user } = useSelector((state) => state.auth);
+const { isLoading, error, isAuthenticated, user } = useSelector((state) => state.auth);
   if (isAuthenticated && user) {
     if (user.role === 'InventoryManager') {
       navigate('/im/dashboard');
