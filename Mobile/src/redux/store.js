@@ -11,6 +11,7 @@ export const store = configureStore({
     menu: menuReducer,
     order: orderReducer,
     inventory: inventoryReducer,
+    store: storeReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
