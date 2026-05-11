@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { fetchInventory, updateInventoryItem } from '../../redux/slices/inventorySlice';
-import './Inventory.css';
+import './InventoryScreen.css';
 
 const getStockStatus = (item) => {
   const current = Number(item.current_stock ?? item.quantityInStock ?? 0);
