@@ -3,19 +3,19 @@ import { Provider, useSelector } from 'react-redux';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { store } from './src/redux/store';
-import { theme } from './src/theme/theme';
+import { store } from './redux/store';
+import { theme } from './theme/theme';
 
 // Screens
-import LoginScreen from './src/screens/auth/LoginScreen';
-import MenuScreen from './src/screens/menu/MenuScreen';
-import OrdersScreen from './src/screens/orders/OrdersScreen';
-import InventoryScreen from './src/screens/inventory/InventoryScreen';
-import ProfileScreen from './src/screens/profile/ProfileScreen';
-import CartScreen from './src/screens/cart/CartScreen';
-import MainLayout from './src/navigation/MainLayout';
-import IMDashboardScreen from './src/screens/im/IMDashboardScreen';
-import StoreScreen from './src/screens/store/StoreScreen';
+import LoginScreen from './screens/auth/LoginScreen';
+import MenuScreen from './screens/menu/MenuScreen';
+import OrdersScreen from './screens/orders/OrdersScreen';
+import InventoryScreen from './screens/inventory/InventoryScreen';
+import ProfileScreen from './screens/profile/ProfileScreen';
+import CartScreen from './screens/cart/CartScreen';
+import MainLayout from './navigation/MainLayout';
+import IMDashboardScreen from './screens/im/IMDashboardScreen';
+import StoreScreen from './screens/store/StoreScreen';
 
 // ── WebSocket notification listener ──────────────────────────────────────────
 const NotificationListener = () => {
