@@ -127,12 +127,18 @@ const InventoryScreen = () => {
     items.filter(i => getStockStatus(i).label === 'Low').length, [items]);
 
   const handleSelect = (item) => {
-    if (selected?.id === item.id) { setSelected(null); setEditForm(null); return; }
-    setSelected(item);
+  const itemId = item.id ?? item.inventoryItemId;
+  const selectedId = selected?.id ?? selected?.inventoryItemId;
+  if (selectedId === itemId) {
+    setSelected(null);
     setEditForm(null);
-    setSaveSuccess(false);
-    setSaveError('');
-  };
+    return;
+  }
+  setSelected(item);
+  setEditForm(null);
+  setSaveSuccess(false);
+  setSaveError('');
+};
 
   const setEdit = (key) => (val) => setEditForm(f => ({ ...f, [key]: val }));
 
