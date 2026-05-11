@@ -123,6 +123,7 @@ class RoesAdmin(tk.Tk):
         self.user = None
         self.session = requests.Session()
         self.orders = []
+        self.store = []
         self.menu_items = []
         self.inventory_items = []
         self.suppliers = []
@@ -252,6 +253,18 @@ class RoesAdmin(tk.Tk):
             self.purchase_orders = self._api_list('/inventory/purchase-orders/')
         except Exception:
             self.purchase_orders = []
+    
+    def _load_store(self):
+        try:
+            self.store = self._api_list('/store/store-items/')
+        except Exception:
+            self.store = []
+    
+    def _load_store(self):
+        try:
+            self.store = self._api_list('/store/store-transaction/')
+        except Exception:
+            self.store = []
 
     def _load_notifications(self):
         try:
@@ -636,11 +649,15 @@ class RoesAdmin(tk.Tk):
         elif key == "dashboard":
             self._load_orders()
             self._load_notifications()
+        elif key == 'store':
+            self._load_store()
+            self._page_store()
         pages = {
             "dashboard":     self._page_dashboard,
             "orders":        self._page_orders,
             "menu":          self._page_menu,
             "inventory":     self._page_inventory,
+            "store":         self._page_store,
             "analytics":     self._page_analytics,
             "staff":         self._page_staff,
             "notifications": self._page_notifications,
@@ -1765,6 +1782,504 @@ class RoesAdmin(tk.Tk):
         receive_btn.pack(side="left")
         tk.Label(btn_frame, text="Select a Purchase Order above, then click to receive and update stock.",
             font=("Arial", 9), bg=t["bg"], fg=t["text_muted"]).pack(side="left", padx=12)
+
+    # ─────────────────────────────────────────────────────────────────────────────
+#  Store Page — drop these methods into the RoesAdmin class
+#  Requires: tkinter, ttk, messagebox (already imported in the main app)
+#  API endpoints consumed:
+#    GET    /store/items/             → list all items
+#    GET    /store/items/low_stock/   → low-stock items
+#    POST   /store/items/             → create item
+#    PATCH  /store/items/{id}/        → update item
+#    DELETE /store/items/{id}/        → delete item
+#    POST   /store/items/{id}/transact/ → log a movement
+#    GET    /store/transactions/      → full transaction log
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Data loading ──────────────────────────────────────────────────────────────
+
+    def _load_store_items(self):
+        try:
+            self.store_items = self._api_list('/store/items/')
+        except Exception:
+            self.store_items = []
+
+    def _load_store_transactions(self):
+        try:
+            self.store_transactions = self._api_list('/store/transactions/')
+        except Exception:
+            self.store_transactions = []
+
+# ── Main Store page ───────────────────────────────────────────────────────────
+
+    def _page_store(self):
+        t = self.t
+        root = tk.Frame(self._content, bg=t["bg"])
+        root.pack(fill="both", expand=True, padx=24, pady=20)
+
+        # ── initialise store data lists if not present ────────────────────
+        if not hasattr(self, 'store_items'):
+            self.store_items = []
+        if not hasattr(self, 'store_transactions'):
+            self.store_transactions = []
+
+        self._load_store_items()
+        self._load_store_transactions()
+
+        # ── header row ────────────────────────────────────────────────────
+        hf = tk.Frame(root, bg=t["bg"])
+        hf.pack(fill="x", pady=(0, 14))
+        tk.Label(hf, text="Store", font=("Georgia", 18, "bold"),
+                 bg=t["bg"], fg=t["text"]).pack(side="left")
+
+        btn_frame = tk.Frame(hf, bg=t["bg"])
+        btn_frame.pack(side="right")
+        self._btn(btn_frame, "📋 Transaction Log",
+                  lambda: self._store_transactions_window()).pack(side="right", padx=(6, 0))
+        self._btn(btn_frame, "⚠ Low Stock",
+                  lambda: self._store_low_stock_window()).pack(side="right", padx=(6, 0))
+        self._btn(btn_frame, "+ Add Item",
+                  lambda: self._store_item_form()).pack(side="right")
+
+        # ── summary cards ─────────────────────────────────────────────────
+        sf = tk.Frame(root, bg=t["bg"])
+        sf.pack(fill="x", pady=(0, 16))
+
+        total_items   = len(self.store_items)
+        active_items  = sum(1 for i in self.store_items if i.get("isActive", True))
+        low_stock_ct  = sum(1 for i in self.store_items if self._store_is_low(i))
+        total_txns    = len(self.store_transactions)
+
+        cards = [
+            ("📦 Total Items",    str(total_items),  t.get("accent",  "#f59e0b")),
+            ("✅ Active",          str(active_items), t.get("green",   "#22c55e")),
+            ("⚠ Low Stock",       str(low_stock_ct), t.get("red",     "#ef4444")),
+            ("🔄 Transactions",    str(total_txns),   t.get("blue",    "#3b82f6")),
+        ]
+        for label, value, color in cards:
+            card = tk.Frame(sf, bg=t["card"], highlightthickness=1,
+                            highlightbackground=t["border"])
+            card.pack(side="left", expand=True, fill="x", padx=(0, 10))
+            tk.Frame(card, bg=color, height=4).pack(fill="x")
+            tk.Label(card, text=value, font=("Georgia", 22, "bold"),
+                     bg=t["card"], fg=t["text"]).pack(pady=(10, 0))
+            tk.Label(card, text=label, font=("Arial", 9),
+                     bg=t["card"], fg=t["text_sub"]).pack(pady=(2, 10))
+
+        # ── filter bar ────────────────────────────────────────────────────
+        ff = tk.Frame(root, bg=t["bg"])
+        ff.pack(fill="x", pady=(0, 8))
+
+        tk.Label(ff, text="Filter:", font=("Arial", 9),
+                 bg=t["bg"], fg=t["text_sub"]).pack(side="left")
+
+        self._store_filter_var = tk.StringVar(value="All")
+        for opt in ("All", "Low Stock", "Active", "Inactive"):
+            rb = tk.Radiobutton(ff, text=opt, variable=self._store_filter_var,
+                                value=opt, font=("Arial", 9),
+                                bg=t["bg"], fg=t["text_sub"],
+                                selectcolor=t["card"],
+                                activebackground=t["bg"],
+                                command=lambda: self._refresh_store_tree(tree))
+            rb.pack(side="left", padx=6)
+
+        search_var = tk.StringVar()
+        search_entry = tk.Entry(ff, textvariable=search_var, font=("Arial", 10),
+                                bg=t["input_bg"], fg=t["text"],
+                                insertbackground=t["text"],
+                                relief="flat", bd=0,
+                                highlightthickness=1,
+                                highlightbackground=t["border"])
+        search_entry.pack(side="right", ipadx=8, ipady=4, padx=(0, 0))
+        tk.Label(ff, text="🔍", font=("Arial", 10),
+                 bg=t["bg"], fg=t["text_sub"]).pack(side="right", padx=(0, 4))
+
+        search_var.trace_add("write",
+            lambda *_: self._refresh_store_tree(tree, search=search_var.get()))
+
+        # ── items table ───────────────────────────────────────────────────
+        tf = tk.Frame(root, bg=t["card"], highlightthickness=1,
+                      highlightbackground=t["border"])
+        tf.pack(fill="both", expand=True)
+
+        cols   = ("Name", "Unit", "Qty", "Threshold", "Default Use", "Status", "Actions")
+        widths = [220, 80, 90, 100, 110, 110, 160]
+        tree   = self._make_tree(tf, cols, widths)
+        self._status_tag(tree)
+
+        # custom tags for low-stock highlight
+        tree.tag_configure("LowStock", foreground=t.get("red", "#ef4444"))
+
+        self._store_tree      = tree
+        self._store_search_var = search_var
+        self._refresh_store_tree(tree)
+
+        tree.bind("<Double-1>", lambda e: self._store_edit_selected(tree))
+        self._tree_context_menu(
+            tree,
+            items_list=self.store_items,
+            id_field="id",
+            edit_fn=lambda item: self._store_item_form(item),
+            delete_fn=lambda item: self._store_delete_item(item),
+        )
+
+    # ── helpers ───────────────────────────────────────────────────────────
+
+    def _store_is_low(self, item):
+        threshold = float(item.get("lowStockThreshold") or item.get("low_stock_threshold") or 0)
+        qty       = float(item.get("currentQuantity") or item.get("current_quantity") or 0)
+        return threshold > 0 and qty <= threshold
+
+    def _refresh_store_tree(self, tree, search=""):
+        tree.delete(*tree.get_children())
+        filt   = getattr(self, "_store_filter_var", None)
+        f_val  = filt.get() if filt else "All"
+        search = (search or getattr(self, "_store_search_var",
+                                     tk.StringVar()).get()).lower().strip()
+
+        for item in self.store_items:
+            name      = item.get("name", "Untitled")
+            qty       = float(item.get("currentQuantity") or item.get("current_quantity") or 0)
+            threshold = float(item.get("lowStockThreshold") or item.get("low_stock_threshold") or 0)
+            def_use   = float(item.get("defaultUsageQuantity") or item.get("default_usage_quantity") or 0)
+            unit      = item.get("unit", "")
+            is_active = item.get("isActive", item.get("is_active", True))
+            low       = self._store_is_low(item)
+
+            # apply filter
+            if f_val == "Low Stock"  and not low:      continue
+            if f_val == "Active"     and not is_active: continue
+            if f_val == "Inactive"   and is_active:     continue
+
+            # apply search
+            if search and search not in name.lower():
+                continue
+
+            status_text = "⚠ Low Stock" if low else ("✔ Active" if is_active else "✘ Inactive")
+            tag         = "LowStock" if low else ("Active" if is_active else "Inactive")
+            iid         = str(item.get("id") or name)
+
+            tree.insert("", "end", iid=iid,
+                        values=(name, unit, qty, threshold, def_use, status_text, "Edit | Transact"),
+                        tags=(tag,))
+
+    def _store_edit_selected(self, tree):
+        sel = tree.selection()
+        if not sel:
+            return
+        iid  = sel[0]
+        item = next(
+            (s for s in self.store_items
+             if str(s.get("id") or s.get("name")) == iid),
+            None
+        )
+        if item:
+            self._store_item_form(item)
+
+# ── Add / Edit item form ──────────────────────────────────────────────────────
+
+    def _store_item_form(self, item=None):
+        t = self.t
+        win = tk.Toplevel(self)
+        win.title("Add Store Item" if not item else "Edit Store Item")
+        win.geometry("500x580")
+        win.configure(bg=t["card"])
+        win.resizable(True, True)
+
+        tk.Frame(win, bg=t.get("purple", "#8b5cf6"), height=6).pack(fill="x")
+        icon = "📦" if not item else "✏️"
+        tk.Label(win, text=f"{icon}  {'Add' if not item else 'Edit'} Store Item",
+                 font=("Georgia", 15, "bold"), bg=t["card"], fg=t["text"]
+                 ).pack(pady=(20, 4), padx=32, anchor="w")
+        tk.Frame(win, bg=t["border"], height=1).pack(fill="x", padx=32, pady=(0, 14))
+
+        # ── Name ──────────────────────────────────────────────────────────
+        name_var = tk.StringVar(value=item.get("name", "") if item else "")
+        self._field(win, "Item Name", name_var)
+
+        # ── Unit ──────────────────────────────────────────────────────────
+        unit_choices = ["kg", "g", "L", "ml", "units", "bags", "cartons",
+                        "bottles", "packs", "crates", "pieces"]
+        cur_unit = item.get("unit", "units") if item else "units"
+        unit_var = tk.StringVar(value=cur_unit)
+        tk.Label(win, text="UNIT", font=("Arial", 8, "bold"),
+                 bg=t["card"], fg=t["text_sub"]).pack(anchor="w", padx=32)
+        uf = tk.Frame(win, bg=t["input_bg"], highlightthickness=1,
+                      highlightbackground=t["border"])
+        uf.pack(fill="x", padx=32, pady=(3, 10))
+        ttk.Combobox(uf, textvariable=unit_var, values=unit_choices,
+                     state="readonly", font=("Arial", 11)
+                     ).pack(fill="x", padx=4, ipady=6)
+
+        # ── Qty / Threshold / Default usage ──────────────────────────────
+        qty_var = tk.StringVar(
+            value=str(item.get("currentQuantity") or item.get("current_quantity") or 0) if item else "0")
+        self._field(win, "Current Quantity", qty_var)
+
+        threshold_var = tk.StringVar(
+            value=str(item.get("lowStockThreshold") or item.get("low_stock_threshold") or 0) if item else "0")
+        self._field(win, "Low Stock Threshold", threshold_var)
+
+        def_use_var = tk.StringVar(
+            value=str(item.get("defaultUsageQuantity") or item.get("default_usage_quantity") or 0) if item else "0")
+        self._field(win, "Default Usage Qty", def_use_var)
+
+        # ── Note ──────────────────────────────────────────────────────────
+        note_var = tk.StringVar(value=item.get("note", "") if item else "")
+        self._field(win, "Note (optional)", note_var)
+
+        # ── Active toggle ─────────────────────────────────────────────────
+        active_var = tk.BooleanVar(
+            value=item.get("isActive", item.get("is_active", True)) if item else True)
+        chk_frame = tk.Frame(win, bg=t["card"])
+        chk_frame.pack(anchor="w", padx=32, pady=(0, 12))
+        tk.Label(chk_frame, text="STATUS", font=("Arial", 8, "bold"),
+                 bg=t["card"], fg=t["text_sub"]).pack(anchor="w")
+        ttk.Checkbutton(chk_frame, text="Active item",
+                        variable=active_var).pack(anchor="w", pady=(4, 0))
+
+        # ── Save ─────────────────────────────────────────────────────────
+        def save():
+            name = name_var.get().strip()
+            if not name:
+                messagebox.showwarning("Validation", "Item name is required.", parent=win)
+                return
+            unit = unit_var.get().strip()
+            if not unit:
+                messagebox.showwarning("Validation", "Please select a unit.", parent=win)
+                return
+            try:
+                payload = {
+                    "name":                 name,
+                    "unit":                 unit,
+                    "currentQuantity":      float(qty_var.get() or 0),
+                    "lowStockThreshold":    float(threshold_var.get() or 0),
+                    "defaultUsageQuantity": float(def_use_var.get() or 0),
+                    "note":                 note_var.get().strip(),
+                    "isActive":             active_var.get(),
+                }
+                item_id = item.get("id") if item else None
+                if item and item_id:
+                    self._api_request('patch', f'/store/items/{item_id}/', json=payload)
+                else:
+                    self._api_request('post', '/store/items/', json=payload)
+                messagebox.showinfo("Saved", f"'{name}' saved.", parent=win)
+                win.destroy()
+                self.show_page('store')
+            except Exception as exc:
+                messagebox.showerror("Save Failed", self._fmt_error(exc), parent=win)
+
+        self._form_save_btn(win, "💾  Save Item", save)
+
+# ── Delete item ───────────────────────────────────────────────────────────────
+
+    def _store_delete_item(self, item):
+        name = item.get("name", "this item")
+        if not messagebox.askyesno("Delete", f"Delete '{name}' from store?"):
+            return
+        iid = str(item.get("id", ""))
+        ok, err = self._api_delete(f"/store/items/{iid}/")
+        if ok:
+            messagebox.showinfo("Deleted", f"'{name}' deleted.")
+            self.show_page("store")
+        else:
+            messagebox.showerror("Error", err or "Could not delete item.")
+
+# ── Transact form (stock movement) ────────────────────────────────────────────
+
+    def _store_transact_form(self, item):
+        t   = self.t
+        win = tk.Toplevel(self)
+        win.title(f"Log Movement — {item.get('name', '')}")
+        win.geometry("420x400")
+        win.configure(bg=t["card"])
+        win.resizable(False, False)
+
+        tk.Frame(win, bg=t.get("green", "#22c55e"), height=6).pack(fill="x")
+        tk.Label(win,
+                 text=f"🔄  Stock Movement",
+                 font=("Georgia", 15, "bold"), bg=t["card"], fg=t["text"]
+                 ).pack(pady=(20, 2), padx=32, anchor="w")
+        tk.Label(win,
+                 text=item.get("name", ""),
+                 font=("Arial", 11), bg=t["card"], fg=t["text_sub"]
+                 ).pack(pady=(0, 4), padx=32, anchor="w")
+
+        cur_qty = float(
+            item.get("currentQuantity") or item.get("current_quantity") or 0)
+        unit = item.get("unit", "")
+        tk.Label(win,
+                 text=f"Current stock: {cur_qty} {unit}",
+                 font=("Arial", 10, "bold"), bg=t["card"],
+                 fg=t.get("accent", "#f59e0b")
+                 ).pack(padx=32, anchor="w", pady=(0, 12))
+
+        tk.Frame(win, bg=t["border"], height=1).pack(fill="x", padx=32, pady=(0, 14))
+
+        # ── Transaction type ──────────────────────────────────────────────
+        tx_types = ["received", "used", "damaged", "adjusted"]
+        tx_labels = {
+            "received": "➕ Received — adds to stock",
+            "used":     "➖ Used — subtracts from stock",
+            "damaged":  "💔 Damaged — subtracts from stock",
+            "adjusted": "🔧 Adjusted — sets absolute value",
+        }
+        tk.Label(win, text="TRANSACTION TYPE", font=("Arial", 8, "bold"),
+                 bg=t["card"], fg=t["text_sub"]).pack(anchor="w", padx=32)
+        tx_var = tk.StringVar(value="received")
+        txf = tk.Frame(win, bg=t["input_bg"], highlightthickness=1,
+                       highlightbackground=t["border"])
+        txf.pack(fill="x", padx=32, pady=(3, 10))
+        tx_cb = ttk.Combobox(txf, textvariable=tx_var,
+                              values=list(tx_labels.values()),
+                              state="readonly", font=("Arial", 11))
+        tx_cb.pack(fill="x", padx=4, ipady=6)
+
+        # ── Quantity ──────────────────────────────────────────────────────
+        qty_var = tk.StringVar()
+        self._field(win, f"Quantity ({unit})", qty_var)
+
+        # ── Note ──────────────────────────────────────────────────────────
+        note_var = tk.StringVar()
+        self._field(win, "Note (optional)", note_var)
+
+        # ── Submit ────────────────────────────────────────────────────────
+        def submit():
+            raw_label = tx_var.get().strip()
+            # map display label back to api value
+            tx_type = next(
+                (k for k, v in tx_labels.items() if v == raw_label), raw_label)
+            try:
+                qty = float(qty_var.get() or 0)
+            except ValueError:
+                messagebox.showwarning("Validation", "Quantity must be a number.", parent=win)
+                return
+            if qty <= 0:
+                messagebox.showwarning("Validation", "Quantity must be greater than 0.", parent=win)
+                return
+            payload = {
+                "transaction_type": tx_type,
+                "quantity":         qty,
+                "note":             note_var.get().strip(),
+            }
+            item_id = str(item.get("id", ""))
+            try:
+                self._api_request('post', f'/store/items/{item_id}/transact/', json=payload)
+                messagebox.showinfo("Logged",
+                                    f"Movement logged: {tx_type} {qty} {unit}",
+                                    parent=win)
+                win.destroy()
+                self.show_page('store')
+            except Exception as exc:
+                messagebox.showerror("Failed", self._fmt_error(exc), parent=win)
+
+        self._form_save_btn(win, "✔  Log Movement", submit)
+
+# ── Low-stock popup ───────────────────────────────────────────────────────────
+
+    def _store_low_stock_window(self):
+        t   = self.t
+        win = tk.Toplevel(self)
+        win.title("Low Stock Items")
+        win.geometry("620x420")
+        win.configure(bg=t["bg"])
+
+        tk.Label(win, text="⚠  Low Stock Items",
+                 font=("Georgia", 15, "bold"), bg=t["bg"], fg=t["text"]
+                 ).pack(pady=(18, 4), padx=24, anchor="w")
+        tk.Label(win,
+                 text="Items at or below their low-stock threshold.",
+                 font=("Arial", 10), bg=t["bg"], fg=t["text_sub"]
+                 ).pack(padx=24, anchor="w", pady=(0, 12))
+
+        tf = tk.Frame(win, bg=t["card"], highlightthickness=1,
+                      highlightbackground=t["border"])
+        tf.pack(fill="both", expand=True, padx=16, pady=(0, 16))
+
+        cols   = ("Name", "Unit", "Qty", "Threshold")
+        widths = [240, 80, 100, 120]
+        tree   = self._make_tree(tf, cols, widths)
+        tree.tag_configure("Low", foreground=t.get("red", "#ef4444"))
+
+        low_items = [i for i in self.store_items if self._store_is_low(i)]
+        if not low_items:
+            tree.insert("", "end", values=("No low-stock items 🎉", "", "", ""))
+        else:
+            for item in low_items:
+                qty       = float(item.get("currentQuantity") or item.get("current_quantity") or 0)
+                threshold = float(item.get("lowStockThreshold") or item.get("low_stock_threshold") or 0)
+                tree.insert("", "end",
+                            values=(item.get("name", ""), item.get("unit", ""), qty, threshold),
+                            tags=("Low",))
+
+# ── Transaction log popup ─────────────────────────────────────────────────────
+
+    def _store_transactions_window(self):
+        t   = self.t
+        win = tk.Toplevel(self)
+        win.title("Store Transaction Log")
+        win.geometry("860x520")
+        win.configure(bg=t["bg"])
+
+        hdr = tk.Frame(win, bg=t["bg"])
+        hdr.pack(fill="x", padx=16, pady=(16, 8))
+        tk.Label(hdr, text="📋  Transaction Log",
+                 font=("Georgia", 15, "bold"), bg=t["bg"], fg=t["text"]
+                 ).pack(side="left")
+        self._btn(hdr, "⟳ Refresh",
+                  lambda: _reload()).pack(side="right")
+
+        tf = tk.Frame(win, bg=t["card"], highlightthickness=1,
+                      highlightbackground=t["border"])
+        tf.pack(fill="both", expand=True, padx=16, pady=(0, 16))
+
+        cols   = ("Date / Time", "Item", "Type", "Qty", "Before", "After", "Note", "Recorded By")
+        widths = [140, 180, 90, 70, 70, 70, 160, 130]
+        tree   = self._make_tree(tf, cols, widths)
+
+        # colour-code transaction types
+        tree.tag_configure("received", foreground=t.get("green", "#22c55e"))
+        tree.tag_configure("used",     foreground=t.get("accent","#f59e0b"))
+        tree.tag_configure("damaged",  foreground=t.get("red",   "#ef4444"))
+        tree.tag_configure("adjusted", foreground=t.get("blue",  "#3b82f6"))
+
+        def _populate():
+            tree.delete(*tree.get_children())
+            for tx in self.store_transactions:
+                tx_type   = tx.get("transactionType") or tx.get("transaction_type", "")
+                item_name = (tx.get("item") or {}).get("name") if isinstance(tx.get("item"), dict) \
+                            else tx.get("itemName", "")
+                recorded  = tx.get("recordedBy") or tx.get("recorded_by") or "—"
+                if isinstance(recorded, dict):
+                    recorded = recorded.get("staffName") or recorded.get("email", "—")
+                created   = str(tx.get("createdAt") or tx.get("created_at", ""))[:19].replace("T", " ")
+
+                tree.insert("", "end",
+                            values=(
+                                created,
+                                item_name,
+                                tx_type,
+                                tx.get("quantity", ""),
+                                tx.get("quantityBefore") or tx.get("quantity_before", ""),
+                                tx.get("quantityAfter")  or tx.get("quantity_after",  ""),
+                                tx.get("note", ""),
+                                recorded,
+                            ),
+                            tags=(tx_type,))
+
+        def _reload():
+            self._load_store_transactions()
+            _populate()
+
+        _populate()
+
+# ── Wire store into show_page ─────────────────────────────────────────────────
+# In your existing show_page method, add this branch:
+#
+#   elif page == 'store':
+#       self._page_store()
+#
+# And in _build_nav, add ("store", "Store") to the pages list.
 
     # ── ANALYTICS ─────────────────────────────────────────────────────────
     # ── BUG FIX #1 (continued): Wrap in try/except, show specific error,
