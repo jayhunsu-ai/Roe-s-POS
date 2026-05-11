@@ -24,14 +24,16 @@ const LoginScreen = () => {
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { isLoading, error, isAuthenticated } = useSelector((state) => state.auth);
-
-  useEffect(() => {
-    if (isAuthenticated) {
+const { isLoading, error, isAuthenticated, user } = useSelector((state) => state.auth);
+useEffect(() => {
+  if (isAuthenticated && user) {
+    if (user.role === 'InventoryManager') {
+      navigate('/im/dashboard');
+    } else {
       navigate('/menu');
     }
-  }, [isAuthenticated, navigate]);
-
+  }
+}, [isAuthenticated, user, navigate]);
   useEffect(() => {
     if (error) {
       setShowError(true);
