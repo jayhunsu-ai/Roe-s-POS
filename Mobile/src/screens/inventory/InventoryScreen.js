@@ -265,7 +265,7 @@ const InventoryScreen = () => {
             filtered.map((item, idx) => {
               const st      = getStockStatus(item);
               const current = Number(item.current_stock ?? item.quantityInStock ?? 0);
-              const isActive = selected?.id === item.id;
+              const isActive = (selected?.id ?? selected?.inventoryItemId) === (item.id ?? item.inventoryItemId);
               return (
                 <div
                   key={String(item.id ?? item.inventoryItemId)}
