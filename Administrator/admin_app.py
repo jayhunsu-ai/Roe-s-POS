@@ -1980,55 +1980,114 @@ class RoesAdmin(tk.Tk):
         t = self.t
         win = tk.Toplevel(self)
         win.title("Add Store Item" if not item else "Edit Store Item")
-        win.geometry("500x580")
+        win.geometry("500x680")
         win.configure(bg=t["card"])
         win.resizable(True, True)
 
         tk.Frame(win, bg=t.get("purple", "#8b5cf6"), height=6).pack(fill="x")
         icon = "📦" if not item else "✏️"
         tk.Label(win, text=f"{icon}  {'Add' if not item else 'Edit'} Store Item",
-                 font=("Georgia", 15, "bold"), bg=t["card"], fg=t["text"]
-                 ).pack(pady=(20, 4), padx=32, anchor="w")
+             font=("Georgia", 15, "bold"), bg=t["card"], fg=t["text"]
+             ).pack(pady=(20, 4), padx=32, anchor="w")
         tk.Frame(win, bg=t["border"], height=1).pack(fill="x", padx=32, pady=(0, 14))
 
-        # ── Name ──────────────────────────────────────────────────────────
+    # ── Name ──────────────────────────────────────────────────────────
         name_var = tk.StringVar(value=item.get("name", "") if item else "")
         self._field(win, "Item Name", name_var)
 
-        # ── Unit ──────────────────────────────────────────────────────────
+    # ── Unit ──────────────────────────────────────────────────────────
         unit_choices = ["kg", "g", "L", "ml", "units", "bags", "cartons",
-                        "bottles", "packs", "crates", "pieces"]
+                    "bottles", "packs", "crates", "pieces"]
         cur_unit = item.get("unit", "units") if item else "units"
         unit_var = tk.StringVar(value=cur_unit)
         tk.Label(win, text="UNIT", font=("Arial", 8, "bold"),
-                 bg=t["card"], fg=t["text_sub"]).pack(anchor="w", padx=32)
+             bg=t["card"], fg=t["text_sub"]).pack(anchor="w", padx=32)
         uf = tk.Frame(win, bg=t["input_bg"], highlightthickness=1,
-                      highlightbackground=t["border"])
+                  highlightbackground=t["border"])
         uf.pack(fill="x", padx=32, pady=(3, 10))
         ttk.Combobox(uf, textvariable=unit_var, values=unit_choices,
-                     state="readonly", font=("Arial", 11)
-                     ).pack(fill="x", padx=4, ipady=6)
+                 state="readonly", font=("Arial", 11)
+                 ).pack(fill="x", padx=4, ipady=6)
 
-        # ── Qty / Threshold / Default usage ──────────────────────────────
+    # ── Qty / Threshold ───────────────────────────────────────────────
         qty_var = tk.StringVar(
-            value=str(item.get("currentQuantity") or item.get("current_quantity") or 0) if item else "0")
+            value=str(item.get("current_quantity") or 0) if item else "0")
         self._field(win, "Current Quantity", qty_var)
 
         threshold_var = tk.StringVar(
-            value=str(item.get("lowStockThreshold") or item.get("low_stock_threshold") or 0) if item else "0")
+            value=str(item.get("low_stock_threshold") or 0) if item else "0")
         self._field(win, "Low Stock Threshold", threshold_var)
 
-        def_use_var = tk.StringVar(
-            value=str(item.get("defaultUsageQuantity") or item.get("default_usage_quantity") or 0) if item else "0")
-        self._field(win, "Default Usage Qty", def_use_var)
+    # ── Default Usage ─────────────────────────────────────────────────
+        tk.Label(win, text="DEFAULT USAGE (per transaction)",
+                 font=("Arial", 8, "bold"),
+                 bg=t["card"], fg=t["text_sub"]).pack(anchor="w", padx=32, pady=(4, 0))
 
-        # ── Note ──────────────────────────────────────────────────────────
+        usage_row = tk.Frame(win, bg=t["card"])
+        usage_row.pack(fill="x", padx=32, pady=(3, 10))
+
+        def_use_var = tk.StringVar(
+            value=str(item.get("default_usage_quantity") or 0) if item else "0")
+        tk.Entry(usage_row, textvariable=def_use_var,
+                 font=("Arial", 11), width=8,
+                 bg=t["input_bg"], fg=t["text"],
+                 insertbackground=t["text"],
+                 relief="flat", bd=0,
+                 highlightthickness=1,
+                 highlightbackground=t["border"]
+                 ).pack(side="left", ipadx=6, ipady=6)
+
+        tk.Label(usage_row, text="  in  ",
+                 font=("Arial", 10), bg=t["card"], fg=t["text_sub"]).pack(side="left")
+
+        usage_unit_choices = ["cups", "scoops", "ml", "g", "pieces",
+                              "servings", "L", "tablespoons", "units"]
+        cur_usage_unit = item.get("usage_unit", "units") if item else "units"
+        usage_unit_var = tk.StringVar(value=cur_usage_unit)
+        uu_frame = tk.Frame(usage_row, bg=t["input_bg"],
+                            highlightthickness=1, highlightbackground=t["border"])
+        uu_frame.pack(side="left")
+        ttk.Combobox(uu_frame, textvariable=usage_unit_var,
+                     values=usage_unit_choices,
+                     width=12, state="readonly",
+                     font=("Arial", 11)).pack(padx=4, ipady=6)
+
+    # ── Units per stock item ───────────────────────────────────────────
+        tk.Label(win, text="UNITS PER STOCK ITEM  (e.g. 1 bag = 20 cups)",
+                 font=("Arial", 8, "bold"),
+                 bg=t["card"], fg=t["text_sub"]).pack(anchor="w", padx=32, pady=(4, 0))
+
+        upi_row = tk.Frame(win, bg=t["card"])
+        upi_row.pack(fill="x", padx=32, pady=(3, 10))
+
+        units_per_item_var = tk.StringVar(
+            value=str(item.get("units_per_item") or 1) if item else "1")
+        tk.Entry(upi_row, textvariable=units_per_item_var,
+                 font=("Arial", 11), width=8,
+                 bg=t["input_bg"], fg=t["text"],
+                 insertbackground=t["text"],
+                 relief="flat", bd=0,
+                 highlightthickness=1,
+                 highlightbackground=t["border"]
+                 ).pack(side="left", ipadx=6, ipady=6)
+
+        upi_label = tk.Label(upi_row, text=f"  {cur_usage_unit} per {cur_unit}",
+                             font=("Arial", 9), bg=t["card"], fg=t["text_sub"])
+        upi_label.pack(side="left", padx=(6, 0))
+
+    # Update the label live when unit or usage_unit changes
+        def _update_upi_label(*_):
+            upi_label.config(text=f"  {usage_unit_var.get()} per {unit_var.get()}")
+        unit_var.trace_add("write", _update_upi_label)
+        usage_unit_var.trace_add("write", _update_upi_label)
+
+    # ── Note ──────────────────────────────────────────────────────────
         note_var = tk.StringVar(value=item.get("note", "") if item else "")
         self._field(win, "Note (optional)", note_var)
 
-        # ── Active toggle ─────────────────────────────────────────────────
+    # ── Active toggle ─────────────────────────────────────────────────
         active_var = tk.BooleanVar(
-            value=item.get("isActive", item.get("is_active", True)) if item else True)
+            value=item.get("is_active", True) if item else True)
         chk_frame = tk.Frame(win, bg=t["card"])
         chk_frame.pack(anchor="w", padx=32, pady=(0, 12))
         tk.Label(chk_frame, text="STATUS", font=("Arial", 8, "bold"),
@@ -2036,7 +2095,7 @@ class RoesAdmin(tk.Tk):
         ttk.Checkbutton(chk_frame, text="Active item",
                         variable=active_var).pack(anchor="w", pady=(4, 0))
 
-        # ── Save ─────────────────────────────────────────────────────────
+    # ── Save ──────────────────────────────────────────────────────────
         def save():
             name = name_var.get().strip()
             if not name:
@@ -2048,13 +2107,15 @@ class RoesAdmin(tk.Tk):
                 return
             try:
                 payload = {
-                    "name":                 name,
-                    "unit":                 unit,
-                    "current_quantity":      float(qty_var.get() or 0),
+                    "name":                   name,
+                    "unit":                   unit,
+                    "usage_unit":             usage_unit_var.get().strip(),
+                    "units_per_item":         float(units_per_item_var.get() or 1),
+                    "current_quantity":       float(qty_var.get() or 0),
                     "low_stock_threshold":    float(threshold_var.get() or 0),
                     "default_usage_quantity": float(def_use_var.get() or 0),
-                    "note":                 note_var.get().strip(),
-                    "is_active":             active_var.get(),
+                    "note":                   note_var.get().strip(),
+                    "is_active":              active_var.get(),
                 }
                 item_id = item.get("id") if item else None
                 if item and item_id:
@@ -2067,14 +2128,13 @@ class RoesAdmin(tk.Tk):
             except Exception as exc:
                 messagebox.showerror("Save Failed", self._fmt_error(exc), parent=win)
 
-        btn = tk.Button(
-        win, text="💾  Save Item", command=save,
-        font=("Arial", 13, "bold"),
-        bg=t.get("accent", "#f59e0b"), fg="white",
-        relief="flat", cursor="hand2",
-        padx=20, pady=12
-        )
-        btn.pack(fill="x", padx=32, pady=(10, 24))
+        tk.Button(
+            win, text="💾  Save Item", command=save,
+            font=("Arial", 13, "bold"),
+            bg=t.get("accent", "#f59e0b"), fg="white",
+            relief="flat", cursor="hand2",
+            padx=20, pady=12
+        ).pack(fill="x", padx=32, pady=(10, 24))
 
 # ── Delete item ───────────────────────────────────────────────────────────────
 
