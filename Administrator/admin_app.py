@@ -2050,11 +2050,11 @@ class RoesAdmin(tk.Tk):
                 payload = {
                     "name":                 name,
                     "unit":                 unit,
-                    "currentQuantity":      float(qty_var.get() or 0),
-                    "lowStockThreshold":    float(threshold_var.get() or 0),
-                    "defaultUsageQuantity": float(def_use_var.get() or 0),
+                    "current_quantity":      float(qty_var.get() or 0),
+                    "low_stock_threshold":    float(threshold_var.get() or 0),
+                    "default_usage_quantity": float(def_use_var.get() or 0),
                     "note":                 note_var.get().strip(),
-                    "isActive":             active_var.get(),
+                    "is_active":             active_var.get(),
                 }
                 item_id = item.get("id") if item else None
                 if item and item_id:
@@ -2067,7 +2067,14 @@ class RoesAdmin(tk.Tk):
             except Exception as exc:
                 messagebox.showerror("Save Failed", self._fmt_error(exc), parent=win)
 
-        self._form_save_btn(win, "💾  Save Item", save)
+        btn = tk.Button(
+        win, text="💾  Save Item", command=save,
+        font=("Arial", 13, "bold"),
+        bg=t.get("accent", "#f59e0b"), fg="white",
+        relief="flat", cursor="hand2",
+        padx=20, pady=12
+        )
+        btn.pack(fill="x", padx=32, pady=(10, 24))
 
 # ── Delete item ───────────────────────────────────────────────────────────────
 
