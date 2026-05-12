@@ -123,7 +123,8 @@ class RoesAdmin(tk.Tk):
         self.user = None
         self.session = requests.Session()
         self.orders = []
-        self.store = []
+        self.store_items = []
+        self.store_transactions = []
         self.menu_items = []
         self.inventory_items = []
         self.suppliers = []
@@ -254,17 +255,17 @@ class RoesAdmin(tk.Tk):
         except Exception:
             self.purchase_orders = []
     
-    def _load_store(self):
+    def _load_store_items(self):
         try:
-            self.store = self._api_list('/store/store-items/')
+            self.store_items = self._api_list('/store/items/')
         except Exception:
-            self.store = []
-    
-    def _load_store(self):
+            self.store_items = []
+
+    def _load_store_transactions(self):
         try:
-            self.store = self._api_list('/store/store-transaction/')
+            self.store_transactions = self._api_list('/store/transactions/')
         except Exception:
-            self.store = []
+            self.store_transactions = []
 
     def _load_notifications(self):
         try:
@@ -578,6 +579,7 @@ class RoesAdmin(tk.Tk):
             ("dashboard",     "Dashboard"),
             ("orders",        "Orders"),
             ("menu",          "Menu"),
+            ("store",         "Store"),
             ("inventory",     "Inventory"),
             ("analytics",     "Analytics"),
             ("staff",         "Staff"),
@@ -641,7 +643,6 @@ class RoesAdmin(tk.Tk):
         for w in self._content.winfo_children():
             w.destroy()
         if key == "notifications":
-            # ── BUG FIX #2: also load orders so pending orders list is populated
             self._load_notifications()
             self._load_orders()
         elif key == "orders":
@@ -649,9 +650,6 @@ class RoesAdmin(tk.Tk):
         elif key == "dashboard":
             self._load_orders()
             self._load_notifications()
-        elif key == 'store':
-            self._load_store()
-            self._page_store()
         pages = {
             "dashboard":     self._page_dashboard,
             "orders":        self._page_orders,
@@ -2272,14 +2270,6 @@ class RoesAdmin(tk.Tk):
             _populate()
 
         _populate()
-
-# ── Wire store into show_page ─────────────────────────────────────────────────
-# In your existing show_page method, add this branch:
-#
-#   elif page == 'store':
-#       self._page_store()
-#
-# And in _build_nav, add ("store", "Store") to the pages list.
 
     # ── ANALYTICS ─────────────────────────────────────────────────────────
     # ── BUG FIX #1 (continued): Wrap in try/except, show specific error,
