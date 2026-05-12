@@ -1913,6 +1913,36 @@ class RoesAdmin(tk.Tk):
         self._refresh_store_tree(tree)
 
         tree.bind("<Double-1>", lambda e: self._store_edit_selected(tree))
+        def _on_store_action_click(event):
+            region = tree.identify_region(event.x, event.y)
+            if region != "cell":
+                return
+            col = tree.identify_column(event.x)
+            # column #7 is "Actions" (1-indexed)
+            if col != "#7":
+                return
+            iid = tree.identify_row(event.y)
+            if not iid:
+                return
+            item = next(
+                (s for s in self.store_items
+                 if str(s.get("id") or s.get("name")) == iid),
+                None
+            )
+            if not item:
+                return
+
+    # Figure out which half of the cell was clicked (Edit vs Transact)
+            bbox = tree.bbox(iid, col)
+            if not bbox:
+                return
+            mid_x = bbox[0] + bbox[2] // 2
+            if event.x < mid_x:
+                self._store_item_form(item)       # left half → Edit
+            else:
+                self._store_transact_form(item)   # right half → Transact
+
+        tree.bind("<Button-1>", _on_store_action_click)
         self._tree_context_menu(
             tree,
             items_list=self.store_items,
