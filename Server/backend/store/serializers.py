@@ -32,10 +32,11 @@ class StoreItemSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'unit', 'current_quantity',
             'low_stock_threshold', 'default_usage_quantity',
+            'usage_unit', 'units_per_item',
             'note', 'is_active', 'is_low_stock',
             'created_at', 'updated_at', 'transactions',
         ]
-        read_only_fields = ['id', 'current_quantity', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
 
 class StoreItemListSerializer(serializers.ModelSerializer):
@@ -47,6 +48,7 @@ class StoreItemListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'unit', 'current_quantity',
             'low_stock_threshold', 'default_usage_quantity',
+            'usage_unit', 'units_per_item',
             'note', 'is_active', 'is_low_stock',
             'created_at', 'updated_at',
         ]
