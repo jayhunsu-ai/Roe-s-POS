@@ -2231,7 +2231,9 @@ class RoesAdmin(tk.Tk):
         tx_cb.pack(fill="x", padx=4, ipady=6)
 
         # ── Quantity ──────────────────────────────────────────────────────
-        def_use = float(item.get("default_usage_quantity") or item.get("defaultUsageQuantity") or 0)
+        default_usage_qty = float(item.get("default_usage_quantity") or item.get("defaultUsageQuantity") or 0)
+        units_per_item = float(item.get("units_per_item") or 1)
+        def_use = default_usage_qty / units_per_item
         qty_var = tk.StringVar(value=str(def_use) if def_use else "")
         self._field(win, f"Quantity ({unit})", qty_var)
 
