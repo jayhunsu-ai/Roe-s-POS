@@ -2231,8 +2231,19 @@ class RoesAdmin(tk.Tk):
         tx_cb.pack(fill="x", padx=4, ipady=6)
 
         # ── Quantity ──────────────────────────────────────────────────────
-        qty_var = tk.StringVar()
+        def_use = float(item.get("default_usage_quantity") or item.get("defaultUsageQuantity") or 0)
+        qty_var = tk.StringVar(value=str(def_use) if def_use else "")
         self._field(win, f"Quantity ({unit})", qty_var)
+
+        def _on_tx_type_change(*_):
+            raw = tx_var.get()
+            tx_type = next((k for k, v in tx_labels.items() if v == raw), raw)
+            if tx_type == "used":
+                qty_var.set(str(def_use) if def_use else qty_var.get())
+            else:
+                qty_var.set("")
+
+        tx_var.trace_add("write", _on_tx_type_change)
 
         # ── Note ──────────────────────────────────────────────────────────
         note_var = tk.StringVar()
