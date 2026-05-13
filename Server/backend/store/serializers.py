@@ -58,5 +58,5 @@ class StoreItemListSerializer(serializers.ModelSerializer):
 class StoreTransactionCreateSerializer(serializers.Serializer):
     """Used when the IM logs a transaction against a store item"""
     transaction_type = serializers.ChoiceField(choices=StoreTransaction.TransactionType.choices)
-    quantity         = serializers.FloatField(min_value=0.01)
+    quantity         = serializers.FloatField(min_value=0.0000001)
     note             = serializers.CharField(required=False, allow_blank=True, default='')
