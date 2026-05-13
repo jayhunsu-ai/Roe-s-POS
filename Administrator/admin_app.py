@@ -1967,6 +1967,16 @@ class RoesAdmin(tk.Tk):
         qty       = float(item.get("currentQuantity") or item.get("current_quantity") or 0)
         return threshold > 0 and qty <= threshold
 
+    def _format_mixed_qty(self, qty_in_stock_units, units_per_item, stock_unit, usage_unit):
+        whole = int(qty_in_stock_units)
+        remainder_usage = round((qty_in_stock_units - whole) * units_per_item, 2)
+        parts = []
+        if whole:
+            parts.append(f"{whole} {stock_unit}")
+        if remainder_usage:
+            parts.append(f"{remainder_usage} {usage_unit}")
+        return " ".join(parts) if parts else f"0 {stock_unit}"
+
     def _refresh_store_tree(self, tree, search=""):
         tree.delete(*tree.get_children())
         filt   = getattr(self, "_store_filter_var", None)
