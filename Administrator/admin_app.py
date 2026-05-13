@@ -65,7 +65,16 @@ def fmt(n):
     except (TypeError, ValueError):
         return "₦0"
 
-
+def _format_mixed_qty(self, qty_in_stock_units, units_per_item, stock_unit, usage_unit):
+    whole = int(qty_in_stock_units)
+    remainder_usage = round((qty_in_stock_units - whole) * units_per_item, 2)
+    parts = []
+    if whole:
+        parts.append(f"{whole} {stock_unit}")
+    if remainder_usage:
+        parts.append(f"{remainder_usage} {usage_unit}")
+    return " ".join(parts) if parts else f"0 {stock_unit}"
+    
 def stock_status(item):
     qty       = item.get("quantityInStock", item.get("qty", 0))
     threshold = item.get("lowStockThreshold", item.get("threshold", 0))
@@ -1987,8 +1996,12 @@ class RoesAdmin(tk.Tk):
             tag         = "LowStock" if low else ("Active" if is_active else "Inactive")
             iid         = str(item.get("id") or name)
 
+            units_per_item = float(item.get("units_per_item") or 1)
+            usage_unit     = item.get("usage_unit", unit)
+            qty_display    = self._format_mixed_qty(qty, units_per_item, unit, usage_unit)
+
             tree.insert("", "end", iid=iid,
-                        values=(name, unit, qty, threshold, def_use, status_text, "Edit | Transact"),
+                        values=(name, unit, qty_display, threshold, def_use, status_text, "Edit | Transact"),
                         tags=(tag,))
 
     def _store_edit_selected(self, tree):
@@ -2186,7 +2199,7 @@ class RoesAdmin(tk.Tk):
         t   = self.t
         win = tk.Toplevel(self)
         win.title(f"Log Movement — {item.get('name', '')}")
-        win.geometry("420x400")
+        win.geometry("420x420")
         win.configure(bg=t["card"])
         win.resizable(False, False)
 
@@ -2200,19 +2213,21 @@ class RoesAdmin(tk.Tk):
                  font=("Arial", 11), bg=t["card"], fg=t["text_sub"]
                  ).pack(pady=(0, 4), padx=32, anchor="w")
 
-        cur_qty = float(
-            item.get("currentQuantity") or item.get("current_quantity") or 0)
-        unit = item.get("unit", "")
+        cur_qty        = float(item.get("currentQuantity") or item.get("current_quantity") or 0)
+        unit           = item.get("unit", "")
+        units_per_item = float(item.get("units_per_item") or 1)
+        usage_unit     = item.get("usage_unit", unit)
+
+        mixed = self._format_mixed_qty(cur_qty, units_per_item, unit, usage_unit)
         tk.Label(win,
-                 text=f"Current stock: {cur_qty} {unit}",
+                 text=f"Current stock: {mixed}",
                  font=("Arial", 10, "bold"), bg=t["card"],
                  fg=t.get("accent", "#f59e0b")
                  ).pack(padx=32, anchor="w", pady=(0, 12))
 
         tk.Frame(win, bg=t["border"], height=1).pack(fill="x", padx=32, pady=(0, 14))
 
-        # ── Transaction type ──────────────────────────────────────────────
-        tx_types = ["received", "used", "damaged", "adjusted"]
+    # ── Transaction type ──────────────────────────────────────────────
         tx_labels = {
             "received": "➕ Received — adds to stock",
             "used":     "➖ Used — subtracts from stock",
@@ -2230,41 +2245,75 @@ class RoesAdmin(tk.Tk):
                               state="readonly", font=("Arial", 11))
         tx_cb.pack(fill="x", padx=4, ipady=6)
 
-        # ── Quantity ──────────────────────────────────────────────────────
+    # ── Quantity ──────────────────────────────────────────────────────
         default_usage_qty = float(item.get("default_usage_quantity") or item.get("defaultUsageQuantity") or 0)
-        units_per_item = float(item.get("units_per_item") or 1)
-        def_use = default_usage_qty / units_per_item
-        qty_var = tk.StringVar(value=str(def_use) if def_use else "")
-        self._field(win, f"Quantity ({unit})", qty_var)
+        def_use = default_usage_qty  # in usage units (cups)
+
+        qty_var = tk.StringVar(value="")
+
+        tk.Label(win, text="QUANTITY", font=("Arial", 8, "bold"),
+                 bg=t["card"], fg=t["text_sub"]).pack(anchor="w", padx=32)
+        qty_label = tk.Label(win, text=f"in {usage_unit}",
+                         font=("Arial", 8), bg=t["card"], fg=t["text_sub"])
+        qty_label.pack(anchor="w", padx=32)
+        qty_entry = tk.Entry(win, textvariable=qty_var,
+                             font=("Arial", 11),
+                             bg=t["input_bg"], fg=t["text"],
+                             insertbackground=t["text"],
+                             relief="flat", bd=0,
+                             highlightthickness=1,
+                             highlightbackground=t["border"])
+        qty_entry.pack(fill="x", padx=32, pady=(3, 10), ipadx=8, ipady=6)
 
         def _on_tx_type_change(*_):
-            raw = tx_var.get()
+            raw     = tx_var.get()
             tx_type = next((k for k, v in tx_labels.items() if v == raw), raw)
-            if tx_type == "used":
-                qty_var.set(str(def_use) if def_use else qty_var.get())
-            else:
+            if tx_type in ("used", "damaged"):
+                qty_var.set(str(def_use) if def_use else "")
+                qty_label.config(text=f"in {usage_unit}")
+            elif tx_type == "adjusted":
                 qty_var.set("")
+                qty_label.config(text=f"in {unit}  (absolute — e.g. 2.5 {unit})")
+            else:  # received
+                qty_var.set("")
+                qty_label.config(text=f"in {unit}")
 
         tx_var.trace_add("write", _on_tx_type_change)
 
-        # ── Note ──────────────────────────────────────────────────────────
+    # ── Note ──────────────────────────────────────────────────────────
         note_var = tk.StringVar()
         self._field(win, "Note (optional)", note_var)
 
-        # ── Submit ────────────────────────────────────────────────────────
+    # ── Submit ────────────────────────────────────────────────────────
         def submit():
             raw_label = tx_var.get().strip()
-            # map display label back to api value
-            tx_type = next(
+            tx_type   = next(
                 (k for k, v in tx_labels.items() if v == raw_label), raw_label)
             try:
-                qty = float(qty_var.get() or 0)
+                qty_input = float(qty_var.get() or 0)
             except ValueError:
                 messagebox.showwarning("Validation", "Quantity must be a number.", parent=win)
                 return
-            if qty <= 0:
+            if qty_input <= 0:
                 messagebox.showwarning("Validation", "Quantity must be greater than 0.", parent=win)
                 return
+
+        # convert to stock units for API
+            if tx_type == "adjusted":
+                qty = qty_input  # already in stock units
+            else:
+                qty = qty_input / units_per_item  # cups → bags
+
+        # overdraft guard
+            if tx_type in ("used", "damaged") and qty > cur_qty:
+                messagebox.showwarning(
+                    "Not Enough Stock",
+                    f"Only {mixed} available.\n"
+                    f"Cannot subtract {qty_input} {usage_unit}.",
+                    parent=win
+                )
+                return
+
             payload = {
                 "transaction_type": tx_type,
                 "quantity":         qty,
@@ -2273,9 +2322,12 @@ class RoesAdmin(tk.Tk):
             item_id = str(item.get("id", ""))
             try:
                 self._api_request('post', f'/store/items/{item_id}/transact/', json=payload)
-                messagebox.showinfo("Logged",
-                                    f"Movement logged: {tx_type} {qty} {unit}",
-                                    parent=win)
+                messagebox.showinfo(
+                    "Logged",
+                    f"Movement logged: {tx_type} {qty_input} "
+                    f"{'(absolute) ' + unit if tx_type == 'adjusted' else usage_unit}",
+                    parent=win
+                )
                 win.destroy()
                 self.show_page('store')
             except Exception as exc:
