@@ -40,3 +40,5 @@ Desktop.ini
 build/
 dist/
 *.egg-info/
+
+.gitignore
