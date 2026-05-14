@@ -13,6 +13,9 @@ venv/
 .venv/
 env/
 
+#config
+config.py
+
 # Django
 db.sqlite3
 staticfiles/
