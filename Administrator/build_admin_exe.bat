@@ -5,7 +5,7 @@ echo Installing PyInstaller if needed...
 python -m pip install --user pyinstaller
 
 echo Preparing icon file...
-set "ICON_SOURCE=Roe's.ico"
+set "ICON_SOURCE=Roes.ico"
 set "ICON_SAFE=Roes.ico"
 if exist "%ICON_SOURCE%" copy /y "%ICON_SOURCE%" "%ICON_SAFE%" >nul
 
