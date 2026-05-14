@@ -12,7 +12,10 @@ from datetime import datetime
 from unicodedata import name
 import requests
 from requests.exceptions import RequestException
+import threading
+from updater import check_for_update
 
+threading.Thread(target=check_for_update, daemon=True).start()
 # ─────────────────────────────────────────────────────────────────────────────
 # THEME
 # ─────────────────────────────────────────────────────────────────────────────
