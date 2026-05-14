@@ -25,6 +25,7 @@ jobs:
 
       - name: Build exe
         run: |
+          cd Administrator
           python -m PyInstaller --noconfirm --onefile --windowed --icon="Roes.ico" --name "roes-admin" admin_app.py
 
       - name: Upload Release Asset
